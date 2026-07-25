@@ -51,7 +51,77 @@ const App = (() => {
                 if (!Array.isArray(data.projects)) data.projects = [];
                 if (!Array.isArray(data.transactions)) data.transactions = [];
 
-                // Migration for legacy transactions to support single-card partial payments & createdBy
+                // ── MIGRATION v2: Merge legacy "Kısmi Tahsilat" duplicates ──
+                // Old executePayment created SEPARATE paid transactions for partial payments
+                // AND reduced the original's amount. We need to:
+                //  1. Find those duplicates (description contains "Kısmi Tahsilat")
+                //  2. Add their amounts back to the parent's payments[] array
+                //  3. Restore the parent's original amount
+                //  4. Remove the duplicates
+                if (!data._migrated_v2) {
+                    const duplicateIds = new Set();
+                    const parentAdjustments = new Map(); // parentKey -> [{amount, date, createdBy}]
+
+                    data.transactions.forEach(t => {
+                        if (t.description && t.paymentStatus === 'odendi') {
+                            const kısmiMatch = t.description.match(/Kısmi Tahsilat\s*\/?\s*Ödenen:\s*[₺\s]*([\d.,]+)/i);
+                            if (kısmiMatch) {
+                                // This is a legacy duplicate — find its parent by matching type+projectId+period
+                                const parentKey = `${t.projectId}_${t.type}_${t.period || 0}`;
+                                if (!parentAdjustments.has(parentKey)) parentAdjustments.set(parentKey, []);
+                                parentAdjustments.get(parentKey).push({
+                                    amount: t.amount,
+                                    date: t.dueDate || (t.createdAt ? t.createdAt.split('T')[0] : todayStr()),
+                                    createdBy: t.createdBy || 'Mimar / Yönetici'
+                                });
+                                duplicateIds.add(t.id);
+                            }
+                        }
+                    });
+
+                    if (duplicateIds.size > 0) {
+                        // For each parent transaction that was reduced, restore its original amount
+                        // and add payments from the duplicates
+                        data.transactions.forEach(t => {
+                            if (duplicateIds.has(t.id)) return; // Skip duplicates themselves
+                            const parentKey = `${t.projectId}_${t.type}_${t.period || 0}`;
+                            const adjustments = parentAdjustments.get(parentKey);
+                            if (adjustments && t.paymentStatus === 'bekliyor') {
+                                // Restore original amount: current reduced amount + sum of partial payments
+                                const paidFromDuplicates = adjustments.reduce((s, a) => s + a.amount, 0);
+                                t.amount = t.amount + paidFromDuplicates;
+                                t.paidAmount = paidFromDuplicates;
+                                t.payments = adjustments.map(a => ({
+                                    id: generateId(),
+                                    amount: a.amount,
+                                    date: a.date,
+                                    createdBy: a.createdBy
+                                }));
+                                // Clean up description
+                                if (t.description) {
+                                    t.description = t.description
+                                        .replace(/\s*\(Eksik Kalan Miktar:.*?\)/g, '')
+                                        .replace(/\s*\(Kısmi Ödeme Yapıldı\)/g, '')
+                                        .replace(/\s*\(Eksik Kalan Bakiye\)/g, '')
+                                        .replace(/^Geçkmiş\s*—\s*/i, '')
+                                        .replace(/^Geçmiş\s*—\s*/i, '')
+                                        .trim();
+                                }
+                                // Remove the parentKey so we don't double-process
+                                parentAdjustments.delete(parentKey);
+                            }
+                        });
+
+                        // Remove the duplicate transactions
+                        data.transactions = data.transactions.filter(t => !duplicateIds.has(t.id));
+                    }
+
+                    data._migrated_v2 = true;
+                    // Save migration result
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                }
+
+                // Basic field migration for any remaining transactions
                 data.transactions.forEach(t => {
                     if (t.paidAmount === undefined) {
                         t.paidAmount = t.paymentStatus === 'odendi' ? t.amount : 0;
@@ -478,6 +548,7 @@ const App = (() => {
             .filter(t => {
                 if (!expenseTypes.includes(t.type)) return false;
                 if (t.paymentStatus !== 'bekliyor') return false;
+                if (getTxRemainingAmount(t) <= 0) return false; // Fully paid but status not updated
                 if (!t.dueDate) return false; // Vadesi belirlenmemiş = henüz nakit akış endişesi değil
                 const due = new Date(t.dueDate);
                 due.setHours(0, 0, 0, 0);
@@ -596,12 +667,20 @@ const App = (() => {
         if (view) view.classList.add('active');
         // Close mobile sidebar
         document.getElementById('sidebar').classList.remove('open');
+        // Scroll to top
+        window.scrollTo(0, 0);
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) mainContent.scrollTop = 0;
     }
 
     function showDashboard() {
         currentProjectId = null;
         showView('view-dashboard');
         renderDashboard();
+        // Update nav active state
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const dashNav = document.getElementById('nav-dashboard');
+        if (dashNav) dashNav.classList.add('active');
     }
 
     function showProject(id) {
