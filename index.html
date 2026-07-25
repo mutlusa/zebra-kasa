@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zebra Mimarlık — Kasa Yönetimi</title>
+    <meta name="description" content="Zebra Mimarlık ofisinin proje bazlı nakit akışı ve kasa yönetimi. Hakediş tahsilatları, gider takibi ve nakit darboğazı analizi.">
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <img src="zebra_logo_white.png" alt="Zebra Mimarlık" class="sidebar-logo-brand">
+            <span class="brand-subtitle-badge">Nakit Akışı & Kasa Yönetimi</span>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" id="nav-dashboard" onclick="App.showDashboard(); return false;">
+                <span class="nav-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                </span>
+                <span>Dashboard</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button class="btn btn-outline btn-sm" onclick="App.exportData()" title="Verileri JSON olarak dışa aktar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Dışa Aktar
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('file-import-input').click()" title="JSON dosyasından içe aktar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                İçe Aktar
+            </button>
+            <button class="btn btn-danger-outline btn-sm" onclick="App.resetData()" title="Verileri sıfırla veya demo verileri yükle">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                Sıfırla
+            </button>
+            <input type="file" id="file-import-input" accept=".json" style="display:none" onchange="App.importData(event)">
+        </div>
+    </aside>
+
+    <!-- ============ MOBILE HEADER ============ -->
+    <div class="mobile-header" id="mobile-header">
+        <button class="btn-icon" onclick="App.toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <img src="zebra_logo_white.png" alt="Zebra Mimarlık" style="height: 24px; max-width: 180px; object-fit: contain;">
+    </div>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="main-content">
+
+        <!-- ═══════════ DASHBOARD VIEW ═══════════ -->
+        <section id="view-dashboard" class="view active">
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title">Genel Durum</h2>
+                    <p class="page-subtitle">Tüm projelerin nakit akış özeti</p>
+                </div>
+                <button class="btn btn-primary" id="btn-new-project" onclick="App.openNewProject()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Yeni Proje
+                </button>
+            </div>
+
+            <!-- 30-Day Risk Card -->
+            <div id="dashboard-risk-card" class="risk-card risk-positive">
+                <div class="risk-header">
+                    <span class="risk-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </span>
+                    <span class="risk-label">30 Günlük Riskli Bakiye — Tüm Projeler</span>
+                </div>
+                <div id="dashboard-risk-total" class="risk-amount">₺ 0</div>
+                <p class="risk-description">Mevcut kasa bakiyesinden önümüzdeki 30 gün içinde vadesi gelen ödemelerin düşülmüş hali</p>
+            </div>
+
+            <!-- Stats Row -->
+            <div class="stats-row">
+                <div class="stat-card" id="stat-card-income">
+                    <div class="stat-icon income">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Toplam Tahsilat</span>
+                        <span id="stat-total-income" class="stat-value amount-positive">₺ 0</span>
+                    </div>
+                </div>
+                <div class="stat-card" id="stat-card-expense">
+                    <div class="stat-icon expense">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Toplam Gider</span>
+                        <span id="stat-total-expense" class="stat-value amount-negative">₺ 0</span>
+                    </div>
+                </div>
+                <div class="stat-card" id="stat-card-balance">
+                    <div class="stat-icon balance">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Genel Kasa Bakiyesi</span>
+                        <span id="stat-total-balance" class="stat-value">₺ 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects -->
+            <div class="section-header">
+                <h3>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    Projeler
+                </h3>
+            </div>
+            <div id="projects-grid" class="projects-grid">
+                <!-- JS tarafından render edilir -->
+            </div>
+
+            <!-- Upcoming Payments -->
+            <div class="section-header">
+                <h3>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Yaklaşan Ödemeler <span class="text-muted">(30 Gün)</span>
+                </h3>
+            </div>
+            <div id="upcoming-payments" class="upcoming-payments-list">
+                <!-- JS tarafından render edilir -->
+            </div>
+        </section>
+
+        <!-- ═══════════ PROJECT DETAIL VIEW ═══════════ -->
+        <section id="view-project-detail" class="view">
+            <div class="page-header detail-header">
+                <div class="detail-title-row">
+                    <button class="btn btn-outline btn-sm btn-back" onclick="App.showDashboard()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                        Geri
+                    </button>
+                    <div class="detail-title-info">
+                        <h2 id="detail-project-name" class="page-title">Proje Adı</h2>
+                        <div class="detail-meta">
+                            <span class="meta-item">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                                Sözleşme: <strong id="detail-contract-amount">₺ 0</strong>
+                            </span>
+                            <span id="detail-status-badge" class="badge badge-success">Devam Ediyor</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn btn-outline btn-sm" onclick="App.openEditProject()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Düzenle
+                    </button>
+                    <button class="btn btn-danger-outline btn-sm" onclick="App.deleteProject()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        Sil
+                    </button>
+                </div>
+            </div>
+
+            <!-- Project Stats -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon income">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Tahsil Edilen</span>
+                        <span id="detail-income" class="stat-value amount-positive">₺ 0</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon expense">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Toplam Gider</span>
+                        <span id="detail-expense" class="stat-value amount-negative">₺ 0</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon balance">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Kasa Bakiyesi</span>
+                        <span id="detail-balance" class="stat-value">₺ 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Project Risk Card -->
+            <div id="detail-risk-card" class="risk-card risk-positive compact">
+                <div class="risk-header">
+                    <span class="risk-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </span>
+                    <span class="risk-label">30 Günlük Riskli Bakiye</span>
+                </div>
+                <div id="detail-risk" class="risk-amount">₺ 0</div>
+            </div>
+
+            <!-- Profitability Analysis — JS tarafından render edilir -->
+            <div id="detail-profitability"></div>
+
+            <!-- Dönemsel Nakit Akışı — JS tarafından render edilir -->
+            <div id="detail-period-flow"></div>
+
+            <!-- Quick Actions -->
+            <div class="section-header">
+                <h3>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    Hızlı İşlemler
+                </h3>
+            </div>
+            <div class="quick-actions-grid">
+                <button class="btn-quick btn-quick-income" onclick="App.openHakedis()">
+                    <span class="quick-icon">💰</span>
+                    <span class="quick-label">Hakediş Tahsil Et</span>
+                    <span class="quick-desc">Gelir kaydı oluştur</span>
+                </button>
+                <button class="btn-quick btn-quick-malzeme" onclick="App.openMalzeme()">
+                    <span class="quick-icon">🧱</span>
+                    <span class="quick-label">Malzeme Faturası</span>
+                    <span class="quick-desc">Vadeli gider ekle</span>
+                </button>
+                <button class="btn-quick btn-quick-iscilik" onclick="App.openIscilik()">
+                    <span class="quick-icon">👷</span>
+                    <span class="quick-label">Usta Ödemesi</span>
+                    <span class="quick-desc">Vadeli işçilik gideri</span>
+                </button>
+                <button class="btn-quick btn-quick-ofis" onclick="App.openOfisSabit()">
+                    <span class="quick-icon">🏢</span>
+                    <span class="quick-label">Ofis Gideri Yansıt</span>
+                    <span class="quick-desc">Sabit gider payı düş</span>
+                </button>
+                <button class="btn-quick btn-quick-excel" onclick="document.getElementById('csv-import-input').click()">
+                    <span class="quick-icon">📊</span>
+                    <span class="quick-label">Maliyet Tablosu Yükle</span>
+                    <span class="quick-desc">Excel/CSV'den toplu gider aktar</span>
+                </button>
+                <input type="file" id="csv-import-input" accept=".csv,.tsv,.txt,.xls,.xlsx" style="display:none" onchange="App.handleCsvImport(event)">
+            </div>
+
+            <!-- Transactions List -->
+            <div class="section-header">
+                <h3>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    İşlem Geçmişi
+                </h3>
+            </div>
+            <div id="detail-transactions" class="transactions-list">
+                <!-- JS tarafından render edilir -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ============ MODAL ============ -->
+    <div id="modal-overlay" class="modal-overlay" onclick="App.handleOverlayClick(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">Modal Başlık</h3>
+                <button class="modal-close" onclick="App.closeModal()" aria-label="Kapat">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body">
+                <!-- JS tarafından dinamik içerik enjekte edilir -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ TOAST CONTAINER ============ -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- ============ CONFIRM DIALOG ============ -->
+    <div id="confirm-overlay" class="modal-overlay" onclick="App.cancelConfirm()">
+        <div class="modal modal-confirm" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="confirm-title" class="modal-title">Onay</h3>
+                <button class="modal-close" onclick="App.cancelConfirm()" aria-label="Kapat">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">Emin misiniz?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="App.cancelConfirm()">İptal</button>
+                <button class="btn btn-danger" id="confirm-action-btn" onclick="App.executeConfirm()">Onayla</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="xlsx.full.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
