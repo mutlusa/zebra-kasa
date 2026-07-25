@@ -48,9 +48,21 @@ const App = (() => {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 data = JSON.parse(raw);
-                // Ensure arrays exist
                 if (!Array.isArray(data.projects)) data.projects = [];
                 if (!Array.isArray(data.transactions)) data.transactions = [];
+
+                // Migration for legacy transactions to support single-card partial payments & createdBy
+                data.transactions.forEach(t => {
+                    if (t.paidAmount === undefined) {
+                        t.paidAmount = t.paymentStatus === 'odendi' ? t.amount : 0;
+                    }
+                    if (!Array.isArray(t.payments)) {
+                        t.payments = t.paidAmount > 0 ? [{ id: generateId(), amount: t.paidAmount, date: t.createdAt ? t.createdAt.split('T')[0] : todayStr(), createdBy: t.createdBy || 'Mimar / Yönetici' }] : [];
+                    }
+                    if (!t.createdBy) {
+                        t.createdBy = 'Mimar / Yönetici';
+                    }
+                });
             } else {
                 seedDemoData();
             }
@@ -67,6 +79,11 @@ const App = (() => {
     let isCloudSyncing = false;
     const DEFAULT_SYNC_ROOM = 'zebra_kasa_shared_db';
     const PIN_KEY = 'zebra_team_pin';
+    const USER_NAME_KEY = 'zebra_user_name';
+
+    function getUserName() {
+        return localStorage.getItem(USER_NAME_KEY) || 'Mimar / Yönetici';
+    }
 
     function initCloudSync() {
         if (typeof firebase === 'undefined') return;
@@ -115,19 +132,20 @@ const App = (() => {
     function updateSyncBadgeStatus(status) {
         const badge = document.getElementById('cloud-sync-badge');
         if (!badge) return;
+        const currentUser = getUserName();
         if (status === 'connected') {
             badge.innerHTML = `
                 <span style="display:flex; align-items:center; gap:6px; font-weight:700; color:var(--success);">
                     <span class="dot safe" style="background:#10b981; width:8px; height:8px; display:inline-block; border-radius:50%;"></span>
-                    🟢 Canlı Bulut Senkronize
+                    🟢 Bulut Canlı · 👤 ${escapeHtml(currentUser)}
                 </span>
-                <span style="font-size:0.7rem; color:var(--text-muted);">🔑 Ekip</span>
+                <span style="font-size:0.7rem; color:var(--text-muted);">🔑 Ayarlar</span>
             `;
         } else {
             badge.innerHTML = `
                 <span style="display:flex; align-items:center; gap:6px; font-weight:700; color:var(--warning);">
                     <span class="dot" style="background:#f59e0b; width:8px; height:8px; display:inline-block; border-radius:50%;"></span>
-                    🟡 Yerel Kayıt Modu
+                    🟡 Yerel Kayıt · 👤 ${escapeHtml(currentUser)}
                 </span>
             `;
         }
@@ -176,13 +194,18 @@ const App = (() => {
 
     function openPinSettingsModal() {
         const currentPin = localStorage.getItem(PIN_KEY) || '';
+        const currentUser = getUserName();
         const html = `
             <div class="import-info" style="margin-bottom: 15px;">
-                🔑 <strong>Ekip PIN Kodu & Bulut Ayarları</strong><br>
-                Tüm ekip üyelerinin uygulamaya erişirken kullanacağı ortak PIN kodunu belirleyebilirsiniz.
+                🔑 <strong>Kullanıcı Adı & Bulut PIN Ayarları</strong><br>
+                İşlem geçmişinde ve yapılan ödemelerde adınızın görünmesi için kullanıcı adınızı belirleyin.
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label class="form-label" for="setting-user-name">👤 Kullanıcı Adınız / Unvanınız</label>
+                <input class="form-input" type="text" id="setting-user-name" placeholder="Örn: Mimar Mutlu, Şantiye Şefi Ali" value="${escapeHtml(currentUser)}">
             </div>
             <div class="form-group">
-                <label class="form-label" for="setting-team-pin">Ekip PIN Kodu (Boş bırakılırsa şifresiz açılır)</label>
+                <label class="form-label" for="setting-team-pin">🔐 Ekip PIN Kodu (Boş bırakılırsa şifresiz açılır)</label>
                 <input class="form-input" type="text" id="setting-team-pin" placeholder="Örn: 1234" value="${escapeHtml(currentPin)}">
             </div>
             <div class="form-actions">
@@ -190,20 +213,26 @@ const App = (() => {
                 <button type="button" class="btn btn-primary" onclick="App.savePinSettings()">✓ Ayarları Kaydet</button>
             </div>
         `;
-        openModal('🔑 Bulut & PIN Ayarları', html);
+        openModal('🔑 Kullanıcı & PIN Ayarları', html);
     }
 
     function savePinSettings() {
+        const userName = document.getElementById('setting-user-name')?.value.trim() || 'Mimar / Yönetici';
         const newPin = document.getElementById('setting-team-pin')?.value.trim() || '';
+
+        localStorage.setItem(USER_NAME_KEY, userName);
+
         if (newPin) {
             localStorage.setItem(PIN_KEY, newPin);
             sessionStorage.setItem('zebra_pin_unlocked', 'true');
-            showToast(`Ekip PIN Kodu güncellendi: ${newPin}`, 'success');
+            showToast(`Kullanıcı: ${userName} · PIN güncellendi`, 'success');
         } else {
             localStorage.removeItem(PIN_KEY);
-            showToast('PIN Kodu kaldırıldı.', 'info');
+            showToast(`Kullanıcı: ${userName} kaydedildi.`, 'info');
         }
         closeModal();
+        if (currentProjectId) renderProjectDetail(currentProjectId);
+        else renderDashboard();
     }
 
     function saveData() {
@@ -265,19 +294,38 @@ const App = (() => {
     // ─────────────────────────────────────
     // DATA LAYER — CRUD: Transactions
     // ─────────────────────────────────────
+    function getTxPaidAmount(tx) {
+        if (!tx) return 0;
+        if (tx.paymentStatus === 'odendi') return tx.amount;
+        return parseFloat(tx.paidAmount) || 0;
+    }
+
+    function getTxRemainingAmount(tx) {
+        if (!tx) return 0;
+        if (tx.paymentStatus === 'odendi') return 0;
+        const paid = getTxPaidAmount(tx);
+        return Math.max(0, tx.amount - paid);
+    }
+
     function addTransaction(type, projectId, amount, paymentStatus, dueDate, description, estimatedAmount, period) {
+        const currentUser = getUserName();
+        const amtVal = parseFloat(amount) || 0;
+        const isPaid = (paymentStatus === 'odendi');
+
         const tx = {
             id: generateId(),
             type,
             projectId,
-            amount: parseFloat(amount) || 0,
+            amount: amtVal,
+            paidAmount: isPaid ? amtVal : 0,
             paymentStatus: paymentStatus || 'bekliyor',
-            dueDate: dueDate || '',  // Boş bırakılabilir (tahmini maliyet için vade zorunlu değil)
+            dueDate: dueDate || '',
             description: (description || '').trim(),
             period: parseInt(period) || 0,
-            createdAt: new Date().toISOString()
+            createdBy: currentUser,
+            createdAt: new Date().toISOString(),
+            payments: isPaid && amtVal > 0 ? [{ id: generateId(), amount: amtVal, date: todayStr(), createdBy: currentUser }] : []
         };
-        // Tahmini maliyet (iş başlangıcı bütçe tahmini) — opsiyonel
         if (estimatedAmount !== undefined && estimatedAmount !== null && estimatedAmount !== '') {
             tx.estimatedAmount = parseFloat(estimatedAmount) || 0;
         }
@@ -1018,9 +1066,21 @@ const App = (() => {
             const isIncome = tx.type === 'hakedis';
             const amountClass = isIncome ? 'positive' : 'negative';
             const amountSign = isIncome ? '+' : '-';
-            const statusBadge = tx.paymentStatus === 'odendi'
-                ? '<span class="badge badge-success">Ödendi</span>'
-                : '<span class="badge badge-warning">Bekliyor</span>';
+
+            const paidAmount = getTxPaidAmount(tx);
+            const remaining = getTxRemainingAmount(tx);
+            const isPartiallyPaid = paidAmount > 0 && remaining > 0;
+
+            // Status badge — enhanced for partial payments
+            let statusBadge = '';
+            if (tx.paymentStatus === 'odendi') {
+                statusBadge = '<span class="badge badge-success">✅ Ödendi</span>';
+            } else if (isPartiallyPaid) {
+                const pct = Math.round((paidAmount / tx.amount) * 100);
+                statusBadge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">⚠️ Kısmi %${pct}</span>`;
+            } else {
+                statusBadge = '<span class="badge badge-warning">Bekliyor</span>';
+            }
 
             // Tahmini vs Anlaşılan karşılaştırma satırı
             let estimateLine = '';
@@ -1043,6 +1103,32 @@ const App = (() => {
             const dateLabelText = tx.dueDate ? `Vade: ${formatDate(tx.dueDate)}` : 'Vade: Belirlenmemiş';
             const periodLabelText = periodBadge ? ` · ${periodBadge}` : '';
 
+            // createdBy line
+            const createdByLine = tx.createdBy ? `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">👤 ${escapeHtml(tx.createdBy)}</div>` : '';
+
+            // Partial payment progress bar + remaining info
+            let partialPaymentLine = '';
+            if (isPartiallyPaid) {
+                const pct = Math.round((paidAmount / tx.amount) * 100);
+                partialPaymentLine = `
+                    <div style="margin-top:6px;">
+                        <div style="display:flex; justify-content:space-between; font-size:0.72rem; font-weight:600; margin-bottom:3px;">
+                            <span style="color:var(--success);">Ödenen: ${formatCurrency(paidAmount)}</span>
+                            <span style="color:var(--danger);">Kalan: ${formatCurrency(remaining)}</span>
+                        </div>
+                        <div style="width:100%; height:6px; background:rgba(239,68,68,0.15); border-radius:3px; overflow:hidden;">
+                            <div style="width:${pct}%; height:100%; background:linear-gradient(90deg, #10b981, #34d399); border-radius:3px; transition:width 0.3s;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Öde button text: show remaining amount for partial items
+            let payButtonLabel = '✓ Öde';
+            if (isPartiallyPaid) {
+                payButtonLabel = `💳 Kalan ${formatCurrency(remaining)} Öde`;
+            }
+
             return `
                 <div class="transaction-item">
                     <div class="tx-icon ${typeInfo.cssClass || ''}">${typeInfo.icon || '📄'}</div>
@@ -1050,13 +1136,15 @@ const App = (() => {
                         <div class="tx-desc">${escapeHtml(tx.description || typeInfo.label)}</div>
                         <div class="tx-date">${dateLabelText} · ${typeInfo.label}${periodLabelText}</div>
                         ${estimateLine}
+                        ${createdByLine}
+                        ${partialPaymentLine}
                     </div>
                     <span class="tx-amount ${amountClass}">${amountSign}${formatCurrency(tx.amount)}</span>
                     <span class="tx-status">${statusBadge}</span>
                     <div class="tx-actions">
                         ${tx.paymentStatus === 'bekliyor' ? `
-                            <button class="btn btn-xs btn-success" onclick="event.stopPropagation(); App.markAsPaid('${tx.id}')" title="Ödendi olarak işaretle">
-                                ✓ Öde
+                            <button class="btn btn-xs btn-success" onclick="event.stopPropagation(); App.markAsPaid('${tx.id}')" title="Ödendi olarak işaretle" style="${isPartiallyPaid ? 'font-size:0.68rem; padding:3px 8px;' : ''}">
+                                ${payButtonLabel}
                             </button>
                         ` : ''}
                         <button class="btn btn-xs btn-outline" onclick="event.stopPropagation(); App.openEditTransaction('${tx.id}')" title="Düzenle">
@@ -1650,22 +1738,65 @@ const App = (() => {
 
         const typeInfo = TX_TYPES[tx.type] || {};
         const formattedDate = tx.dueDate ? formatDate(tx.dueDate) : 'Vade Belirtilmedi';
+        const paidSoFar = getTxPaidAmount(tx);
+        const remaining = getTxRemainingAmount(tx);
+
+        // Build payment history section
+        let paymentHistoryHtml = '';
+        if (tx.payments && tx.payments.length > 0) {
+            const rows = tx.payments.map((p, i) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:rgba(16,185,129,0.06); border-radius:6px; margin-bottom:4px; font-size:0.82rem;">
+                    <span style="color:var(--success); font-weight:600;">#${i + 1} · ${formatCurrency(p.amount)}</span>
+                    <span style="color:var(--text-muted);">📅 ${formatDate(p.date)} · 👤 ${escapeHtml(p.createdBy || 'Bilinmiyor')}</span>
+                </div>
+            `).join('');
+            paymentHistoryHtml = `
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--success); font-weight:700; margin-bottom:6px;">
+                        ✅ ÖNCEKİ ÖDEMELER
+                    </div>
+                    ${rows}
+                </div>
+            `;
+        }
+
+        // Summary box
+        const summaryHtml = `
+            <div style="background: rgba(99,102,241,0.06); border: 1.5px solid rgba(99,102,241,0.2); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; text-align:center;">
+                    <div>
+                        <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600;">Toplam Tutar</div>
+                        <div style="font-size:1.1rem; font-weight:800; color:var(--text-main);">${formatCurrency(tx.amount)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--success); font-weight:600;">Ödenen</div>
+                        <div style="font-size:1.1rem; font-weight:800; color:var(--success);">${formatCurrency(paidSoFar)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--danger); font-weight:600;">Kalan Borç</div>
+                        <div style="font-size:1.1rem; font-weight:800; color:var(--danger);">${formatCurrency(remaining)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
 
         const html = `
-            <div class="import-info" style="margin-bottom: 16px;">
+            <div class="import-info" style="margin-bottom: 10px;">
                 💳 <strong>${escapeHtml(tx.description || typeInfo.label)}</strong><br>
-                Toplam Tutar: <strong>${formatCurrency(tx.amount)}</strong> · <span>Mevcut Vade: ${formattedDate}</span>
+                <span style="font-size:0.82rem; color:var(--text-muted);">Vade: ${formattedDate} · 👤 ${escapeHtml(tx.createdBy || 'Bilinmiyor')}</span>
             </div>
+            ${summaryHtml}
+            ${paymentHistoryHtml}
             <form onsubmit="App.executePayment(event, '${txId}')">
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label class="form-label">Ödeme Tipi</label>
                     <div style="display: flex; gap: 10px;">
                         <label style="flex:1; display:flex; align-items:center; gap:8px; padding:10px 12px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm); cursor:pointer;">
-                            <input type="radio" name="pay-mode" value="full" checked onchange="App.onPayModeChange(${tx.amount})">
-                            <span style="font-size:0.85rem; font-weight:600;">✓ Tam Ödeme (%100)</span>
+                            <input type="radio" name="pay-mode" value="full" ${remaining <= 0 ? 'checked' : ''} onchange="App.onPayModeChange(${remaining})">
+                            <span style="font-size:0.85rem; font-weight:600;">✓ Tam Ödeme (Kalanın Tamamı)</span>
                         </label>
                         <label style="flex:1; display:flex; align-items:center; gap:8px; padding:10px 12px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm); cursor:pointer;">
-                            <input type="radio" name="pay-mode" value="partial" onchange="App.onPayModeChange(${tx.amount})">
+                            <input type="radio" name="pay-mode" value="partial" ${remaining > 0 ? '' : ''} onchange="App.onPayModeChange(${remaining})">
                             <span style="font-size:0.85rem; font-weight:600; color:var(--warning);">⚠️ Eksik / Kısmi Ödeme</span>
                         </label>
                     </div>
@@ -1674,8 +1805,8 @@ const App = (() => {
                 <div class="form-group">
                     <label class="form-label" for="input-pay-amount">Ödenen / Tahsil Edilen Tutar (₺)</label>
                     <input class="form-input" type="text" inputmode="numeric" id="input-pay-amount"
-                           value="${tx.amount ? tx.amount.toLocaleString('tr-TR') : ''}"
-                           oninput="App.onPayAmountInput(this, ${tx.amount})" onkeydown="App.onAmountKeyDown(event)" required autofocus>
+                           value="${remaining > 0 ? remaining.toLocaleString('tr-TR') : tx.amount.toLocaleString('tr-TR')}"
+                           oninput="App.onPayAmountInput(this, ${remaining > 0 ? remaining : tx.amount})" onkeydown="App.onAmountKeyDown(event)" required autofocus>
                 </div>
 
                 <div id="partial-payment-box" style="display:none; background: rgba(239, 68, 68, 0.08); border: 1.5px dashed rgba(239, 68, 68, 0.4); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
@@ -1705,25 +1836,25 @@ const App = (() => {
         openModal('💳 Ödeme Kaydet', html);
     }
 
-    function onPayModeChange(totalAmount) {
+    function onPayModeChange(referenceAmount) {
         const mode = document.querySelector('input[name="pay-mode"]:checked')?.value;
         const amountInput = document.getElementById('input-pay-amount');
         if (mode === 'full') {
-            if (amountInput) amountInput.value = totalAmount.toLocaleString('tr-TR');
-            onPayAmountInput(amountInput, totalAmount);
+            if (amountInput) amountInput.value = referenceAmount.toLocaleString('tr-TR');
+            onPayAmountInput(amountInput, referenceAmount);
         } else {
             if (amountInput) {
                 amountInput.focus();
                 amountInput.select();
             }
-            onPayAmountInput(amountInput, totalAmount);
+            onPayAmountInput(amountInput, referenceAmount);
         }
     }
 
-    function onPayAmountInput(el, totalAmount) {
+    function onPayAmountInput(el, referenceAmount) {
         formatAmountInput(el);
         const payAmount = parseAmountInput(el);
-        const remaining = totalAmount - payAmount;
+        const remaining = referenceAmount - payAmount;
         const box = document.getElementById('partial-payment-box');
         const info = document.getElementById('partial-payment-info');
         const badge = document.getElementById('partial-amount-badge');
@@ -1750,54 +1881,56 @@ const App = (() => {
         if (!tx) return;
 
         const payAmount = parseAmountInput(document.getElementById('input-pay-amount'));
+        const currentUser = getUserName();
+        const remaining = getTxRemainingAmount(tx);
 
         if (payAmount <= 0) {
             showToast('Ödeme tutarı 0\'dan büyük olmalıdır.', 'error');
             return;
         }
 
-        if (payAmount > tx.amount) {
-            showToast('Ödeme tutarı toplam borç tutarını aşamaz.', 'error');
+        if (payAmount > remaining) {
+            showToast(`Ödeme tutarı kalan borç tutarını (${formatCurrency(remaining)}) aşamaz.`, 'error');
             return;
         }
 
-        if (payAmount >= tx.amount) {
-            // Full payment — mark the original as paid
+        // Record this payment in the payments array
+        if (!Array.isArray(tx.payments)) tx.payments = [];
+        tx.payments.push({
+            id: generateId(),
+            amount: payAmount,
+            date: todayStr(),
+            createdBy: currentUser
+        });
+
+        // Update paidAmount
+        tx.paidAmount = (parseFloat(tx.paidAmount) || 0) + payAmount;
+
+        if (payAmount >= remaining) {
+            // Full payment of remaining — mark as fully paid
             tx.paymentStatus = 'odendi';
+            tx.paidAmount = tx.amount;
             saveData();
-            showToast(`Tam ödeme kaydedildi: ${formatCurrency(tx.amount)}`, 'success');
+            showToast(`Tam ödeme kaydedildi: ${formatCurrency(tx.amount)} · 👤 ${currentUser}`, 'success');
         } else {
-            // Partial payment — check new completion date
+            // Partial payment — update due date for remaining
             const newDueDate = document.getElementById('input-partial-due-date')?.value || '';
             if (!newDueDate) {
+                // Revert
+                tx.payments.pop();
+                tx.paidAmount = (parseFloat(tx.paidAmount) || 0) - payAmount;
                 showToast('Lütfen eksik kalan tutar için tamamlanma vade tarihini seçin.', 'error');
                 return;
             }
 
-            const remaining = tx.amount - payAmount;
-
-            // Create new "paid" transaction for the partial amount
-            addTransaction(
-                tx.type,
-                tx.projectId,
-                payAmount,
-                'odendi',
-                todayStr(),
-                (tx.description ? tx.description + ` (Kısmi Tahsilat / Ödenen: ${formatCurrency(payAmount)})` : `Kısmi Ödeme: ${formatCurrency(payAmount)}`),
-                0,
-                tx.period
-            );
-
-            // Update the original transaction for the remaining missing amount and new completion date
-            tx.amount = remaining;
             tx.dueDate = newDueDate;
-            const cleanDesc = tx.description ? tx.description.replace(/\(Eksik Kalan Miktar:.*?\)/g, '').replace(/\(Kısmi Ödeme Yapıldı\)|\(Eksik Kalan Bakiye\)/g, '').trim() : '';
-            tx.description = `${cleanDesc} (Eksik Kalan Miktar: ${formatCurrency(remaining)})`;
+            tx.paymentStatus = 'bekliyor';
             saveData();
 
+            const newRemaining = getTxRemainingAmount(tx);
             const dateText = formatDate(newDueDate);
             showToast(
-                `Kısmi ödeme alındı! Kalan Eksik Miktar: ${formatCurrency(remaining)} (Tamamlanma Vadesi: ${dateText})`,
+                `Kısmi ödeme alındı! Ödenen: ${formatCurrency(payAmount)} · Kalan: ${formatCurrency(newRemaining)} (Vade: ${dateText}) · 👤 ${currentUser}`,
                 'warning'
             );
         }
