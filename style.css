@@ -1831,14 +1831,16 @@ body::before {
 
 /* ─── Collapsible Cards ─── */
 .profit-card .collapsible-body,
-.period-flow-card .collapsible-body {
+.period-flow-card .collapsible-body,
+.completed-section .collapsible-body {
     max-height: 2000px;
     opacity: 1;
     transition: max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease;
 }
 
 .profit-card.collapsed .collapsible-body,
-.period-flow-card.collapsed .collapsible-body {
+.period-flow-card.collapsed .collapsible-body,
+.completed-section.collapsed .collapsible-body {
     max-height: 0;
     opacity: 0;
     padding-top: 0;
@@ -1858,7 +1860,8 @@ body::before {
 }
 
 .profit-card.collapsed .collapse-arrow,
-.period-flow-card.collapsed .collapse-arrow {
+.period-flow-card.collapsed .collapse-arrow,
+.completed-section.collapsed .collapse-arrow {
     transform: rotate(-90deg);
 }
 

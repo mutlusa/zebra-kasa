@@ -1161,102 +1161,287 @@ const App = (() => {
             return;
         }
 
-        container.innerHTML = txs.map(tx => {
-            const project = getProject(tx.projectId);
-            const typeInfo = TX_TYPES[tx.type] || {};
-            const isIncome = tx.type === 'hakedis';
-            const amountClass = isIncome ? 'positive' : 'negative';
-            const amountSign = isIncome ? '+' : '-';
+        // Split into active (bekliyor) and completed (odendi)
+        const activeTxs = txs.filter(t => t.paymentStatus === 'bekliyor');
+        const completedTxs = txs.filter(t => t.paymentStatus === 'odendi');
 
-            const paidAmount = getTxPaidAmount(tx);
-            const remaining = getTxRemainingAmount(tx);
-            const isPartiallyPaid = paidAmount > 0 && remaining > 0;
+        let html = '';
 
-            // Status badge — enhanced for partial payments
-            let statusBadge = '';
-            if (tx.paymentStatus === 'odendi') {
-                statusBadge = '<span class="badge badge-success">✅ Ödendi</span>';
-            } else if (isPartiallyPaid) {
-                const pct = Math.round((paidAmount / tx.amount) * 100);
-                statusBadge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">⚠️ Kısmi %${pct}</span>`;
-            } else {
-                statusBadge = '<span class="badge badge-warning">Bekliyor</span>';
-            }
-
-            // Tahmini vs Anlaşılan karşılaştırma satırı
-            let estimateLine = '';
-            if (tx.estimatedAmount && tx.estimatedAmount > 0) {
-                const diff = tx.amount - tx.estimatedAmount;
-                const diffPct = tx.estimatedAmount > 0 ? ((diff / tx.estimatedAmount) * 100).toFixed(0) : '0';
-                const diffClass = diff > 0 ? 'tx-estimate-over' : (diff < 0 ? 'tx-estimate-under' : 'tx-estimate-match');
-                const diffLabel = diff > 0 ? `+${diffPct}% fazla` : (diff < 0 ? `${diffPct}% düşük` : 'eşit');
-                estimateLine = `<div class="tx-estimate"><span class="tx-estimate-label">Tahmini: ${formatCurrency(tx.estimatedAmount)}</span> <span class="${diffClass}">${diffLabel}</span></div>`;
-            }
-
-            let periodBadge = '';
-            if (tx.period && tx.period > 0 && project && project.periods) {
-                const pObj = project.periods.find(p => p.number === tx.period);
-                if (pObj) {
-                    periodBadge = `<span class="period-badge">${escapeHtml(pObj.label)}</span>`;
-                }
-            }
-
-            const dateLabelText = tx.dueDate ? `Vade: ${formatDate(tx.dueDate)}` : 'Vade: Belirlenmemiş';
-            const periodLabelText = periodBadge ? ` · ${periodBadge}` : '';
-
-            // createdBy line
-            const createdByLine = tx.createdBy ? `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">👤 ${escapeHtml(tx.createdBy)}</div>` : '';
-
-            // Partial payment progress bar + remaining info
-            let partialPaymentLine = '';
-            if (isPartiallyPaid) {
-                const pct = Math.round((paidAmount / tx.amount) * 100);
-                partialPaymentLine = `
-                    <div style="margin-top:6px;">
-                        <div style="display:flex; justify-content:space-between; font-size:0.72rem; font-weight:600; margin-bottom:3px;">
-                            <span style="color:var(--success);">Ödenen: ${formatCurrency(paidAmount)}</span>
-                            <span style="color:var(--danger);">Kalan: ${formatCurrency(remaining)}</span>
-                        </div>
-                        <div style="width:100%; height:6px; background:rgba(239,68,68,0.15); border-radius:3px; overflow:hidden;">
-                            <div style="width:${pct}%; height:100%; background:linear-gradient(90deg, #10b981, #34d399); border-radius:3px; transition:width 0.3s;"></div>
-                        </div>
+        // ── ACTIVE SECTION ──
+        if (activeTxs.length > 0) {
+            html += `
+                <div style="margin-bottom:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                        <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--warning);">
+                            ⏳ Aktif Borçlar & Bekleyen İşlemler
+                        </span>
+                        <span style="font-size:0.68rem; padding:2px 8px; border-radius:10px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:700;">${activeTxs.length}</span>
                     </div>
-                `;
-            }
+                    ${activeTxs.map(tx => renderTxCard(tx, projectId)).join('')}
+                </div>`;
+        }
 
-            // Öde button text: show remaining amount for partial items
-            let payButtonLabel = '✓ Öde';
-            if (isPartiallyPaid) {
-                payButtonLabel = `💳 Kalan ${formatCurrency(remaining)} Öde`;
-            }
-
-            return `
-                <div class="transaction-item">
-                    <div class="tx-icon ${typeInfo.cssClass || ''}">${typeInfo.icon || '📄'}</div>
-                    <div class="tx-info">
-                        <div class="tx-desc">${escapeHtml(tx.description || typeInfo.label)}</div>
-                        <div class="tx-date">${dateLabelText} · ${typeInfo.label}${periodLabelText}</div>
-                        ${estimateLine}
-                        ${createdByLine}
-                        ${partialPaymentLine}
+        // ── COMPLETED SECTION ──
+        if (completedTxs.length > 0) {
+            html += `
+                <div class="completed-section collapsed" style="margin-top:16px;">
+                    <div onclick="this.parentElement.classList.toggle('collapsed')" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none; padding:10px 14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.15); border-radius:var(--radius-sm); margin-bottom:10px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--success);">
+                                ✅ Tamamlanan İşlemler
+                            </span>
+                            <span style="font-size:0.68rem; padding:2px 8px; border-radius:10px; background:rgba(16,185,129,0.15); color:#10b981; font-weight:700;">${completedTxs.length}</span>
+                        </div>
+                        <svg class="collapse-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform 0.3s; color:var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
                     </div>
-                    <span class="tx-amount ${amountClass}">${amountSign}${formatCurrency(tx.amount)}</span>
-                    <span class="tx-status">${statusBadge}</span>
-                    <div class="tx-actions">
-                        ${tx.paymentStatus === 'bekliyor' ? `
-                            <button class="btn btn-xs btn-success" onclick="event.stopPropagation(); App.markAsPaid('${tx.id}')" title="Ödendi olarak işaretle" style="${isPartiallyPaid ? 'font-size:0.68rem; padding:3px 8px;' : ''}">
-                                ${payButtonLabel}
-                            </button>
-                        ` : ''}
-                        <button class="btn btn-xs btn-outline" onclick="event.stopPropagation(); App.openEditTransaction('${tx.id}')" title="Düzenle">
-                            ✎
-                        </button>
-                        <button class="btn btn-xs btn-danger-outline" onclick="event.stopPropagation(); App.deleteTransaction('${tx.id}')" title="İşlemi sil">
-                            ✕
-                        </button>
+                    <div class="collapsible-body" style="overflow:hidden; transition: max-height 0.4s ease, opacity 0.3s ease;">
+                        ${completedTxs.map(tx => renderTxCard(tx, projectId)).join('')}
                     </div>
                 </div>`;
-        }).join('');
+        }
+
+        container.innerHTML = html;
+    }
+
+    function renderTxCard(tx, projectId) {
+        const project = getProject(tx.projectId);
+        const typeInfo = TX_TYPES[tx.type] || {};
+        const isIncome = tx.type === 'hakedis';
+        const amountClass = isIncome ? 'positive' : 'negative';
+        const amountSign = isIncome ? '+' : '-';
+
+        const paidAmount = getTxPaidAmount(tx);
+        const remaining = getTxRemainingAmount(tx);
+        const isPartiallyPaid = paidAmount > 0 && remaining > 0;
+        const hasPayments = tx.payments && tx.payments.length > 0;
+
+        // Status badge
+        let statusBadge = '';
+        if (tx.paymentStatus === 'odendi') {
+            statusBadge = '<span class="badge badge-success">✅ Ödendi</span>';
+        } else if (isPartiallyPaid) {
+            const pct = Math.round((paidAmount / tx.amount) * 100);
+            statusBadge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">⚠️ Kısmi %${pct}</span>`;
+        } else {
+            statusBadge = '<span class="badge badge-warning">Bekliyor</span>';
+        }
+
+        // Tahmini vs Anlaşılan
+        let estimateLine = '';
+        if (tx.estimatedAmount && tx.estimatedAmount > 0) {
+            const diff = tx.amount - tx.estimatedAmount;
+            const diffPct = tx.estimatedAmount > 0 ? ((diff / tx.estimatedAmount) * 100).toFixed(0) : '0';
+            const diffClass = diff > 0 ? 'tx-estimate-over' : (diff < 0 ? 'tx-estimate-under' : 'tx-estimate-match');
+            const diffLabel = diff > 0 ? `+${diffPct}% fazla` : (diff < 0 ? `${diffPct}% düşük` : 'eşit');
+            estimateLine = `<div class="tx-estimate"><span class="tx-estimate-label">Tahmini: ${formatCurrency(tx.estimatedAmount)}</span> <span class="${diffClass}">${diffLabel}</span></div>`;
+        }
+
+        let periodBadge = '';
+        if (tx.period && tx.period > 0 && project && project.periods) {
+            const pObj = project.periods.find(p => p.number === tx.period);
+            if (pObj) {
+                periodBadge = `<span class="period-badge">${escapeHtml(pObj.label)}</span>`;
+            }
+        }
+
+        const dateLabelText = tx.dueDate ? `Vade: ${formatDate(tx.dueDate)}` : 'Vade: Belirlenmemiş';
+        const periodLabelText = periodBadge ? ` · ${periodBadge}` : '';
+        const createdByLine = tx.createdBy ? `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">👤 ${escapeHtml(tx.createdBy)}</div>` : '';
+
+        // Partial payment progress bar
+        let partialPaymentLine = '';
+        if (isPartiallyPaid) {
+            const pct = Math.round((paidAmount / tx.amount) * 100);
+            partialPaymentLine = `
+                <div style="margin-top:6px;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.72rem; font-weight:600; margin-bottom:3px;">
+                        <span style="color:var(--success);">Ödenen: ${formatCurrency(paidAmount)}</span>
+                        <span style="color:var(--danger);">Kalan: ${formatCurrency(remaining)}</span>
+                    </div>
+                    <div style="width:100%; height:6px; background:rgba(239,68,68,0.15); border-radius:3px; overflow:hidden;">
+                        <div style="width:${pct}%; height:100%; background:linear-gradient(90deg, #10b981, #34d399); border-radius:3px; transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Pay button
+        let payButtonLabel = '✓ Öde';
+        if (isPartiallyPaid) {
+            payButtonLabel = `💳 Kalan ${formatCurrency(remaining)} Öde`;
+        }
+
+        return `
+            <div class="transaction-item">
+                <div class="tx-icon ${typeInfo.cssClass || ''}">${typeInfo.icon || '📄'}</div>
+                <div class="tx-info">
+                    <div class="tx-desc">${escapeHtml(tx.description || typeInfo.label)}</div>
+                    <div class="tx-date">${dateLabelText} · ${typeInfo.label}${periodLabelText}</div>
+                    ${estimateLine}
+                    ${createdByLine}
+                    ${partialPaymentLine}
+                </div>
+                <span class="tx-amount ${amountClass}">${amountSign}${formatCurrency(tx.amount)}</span>
+                <span class="tx-status">${statusBadge}</span>
+                <div class="tx-actions">
+                    ${hasPayments || tx.paymentStatus === 'odendi' ? `
+                        <button class="btn btn-xs btn-outline" onclick="event.stopPropagation(); App.openPaymentHistory('${tx.id}')" title="Ödeme geçmişi ve hesap mutabakatı" style="font-size:0.68rem; color:var(--accent);">
+                            📋 Detay
+                        </button>
+                    ` : ''}
+                    ${tx.paymentStatus === 'bekliyor' ? `
+                        <button class="btn btn-xs btn-success" onclick="event.stopPropagation(); App.markAsPaid('${tx.id}')" title="Ödendi olarak işaretle" style="${isPartiallyPaid ? 'font-size:0.68rem; padding:3px 8px;' : ''}">
+                            ${payButtonLabel}
+                        </button>
+                    ` : ''}
+                    <button class="btn btn-xs btn-outline" onclick="event.stopPropagation(); App.openEditTransaction('${tx.id}')" title="Düzenle">
+                        ✎
+                    </button>
+                    <button class="btn btn-xs btn-danger-outline" onclick="event.stopPropagation(); App.deleteTransaction('${tx.id}')" title="İşlemi sil">
+                        ✕
+                    </button>
+                </div>
+            </div>`;
+    }
+
+    // ─────────────────────────────────────
+    // HESAP MUTABAKATI — Payment History & Reconciliation Modal
+    // ─────────────────────────────────────
+    function openPaymentHistory(txId) {
+        const tx = data.transactions.find(t => t.id === txId);
+        if (!tx) return;
+
+        const typeInfo = TX_TYPES[tx.type] || {};
+        const paidAmount = getTxPaidAmount(tx);
+        const remaining = getTxRemainingAmount(tx);
+        const payments = tx.payments || [];
+        const isFullyPaid = tx.paymentStatus === 'odendi';
+
+        // Summary header
+        const pct = tx.amount > 0 ? Math.round((paidAmount / tx.amount) * 100) : 0;
+        const statusColor = isFullyPaid ? 'var(--success)' : (paidAmount > 0 ? '#f59e0b' : 'var(--danger)');
+        const statusLabel = isFullyPaid ? '✅ Tamamen Ödendi' : (paidAmount > 0 ? `⚠️ Kısmi Ödeme (%${pct})` : '⏳ Henüz Ödenmedi');
+
+        let html = `
+            <div style="margin-bottom:18px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <span style="font-size:1.8rem;">${typeInfo.icon || '📄'}</span>
+                    <div>
+                        <div style="font-weight:800; font-size:1rem;">${escapeHtml(tx.description || typeInfo.label)}</div>
+                        <div style="font-size:0.78rem; color:var(--text-muted);">
+                            ${typeInfo.label} · ${tx.dueDate ? 'Vade: ' + formatDate(tx.dueDate) : 'Vade belirlenmemiş'}
+                            ${tx.createdBy ? ' · 👤 ' + escapeHtml(tx.createdBy) : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px;">
+                    <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.2); padding:10px 12px; border-radius:8px; text-align:center;">
+                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600;">Anlaşılan Tutar</div>
+                        <div style="font-size:1.15rem; font-weight:800; color:var(--text-main);">${formatCurrency(tx.amount)}</div>
+                    </div>
+                    <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); padding:10px 12px; border-radius:8px; text-align:center;">
+                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--success); font-weight:600;">Toplam Ödenen</div>
+                        <div style="font-size:1.15rem; font-weight:800; color:var(--success);">${formatCurrency(paidAmount)}</div>
+                    </div>
+                    <div style="background:${isFullyPaid ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.08)'}; border:1px solid ${isFullyPaid ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; padding:10px 12px; border-radius:8px; text-align:center;">
+                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.5px; color:${isFullyPaid ? 'var(--success)' : 'var(--danger)'}; font-weight:600;">Kalan Bakiye</div>
+                        <div style="font-size:1.15rem; font-weight:800; color:${isFullyPaid ? 'var(--success)' : 'var(--danger)'};">${isFullyPaid ? '₺ 0' : formatCurrency(remaining)}</div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div style="margin-bottom:14px;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.7rem; font-weight:600; margin-bottom:4px;">
+                        <span style="color:${statusColor};">${statusLabel}</span>
+                        <span style="color:var(--text-muted);">%${pct}</span>
+                    </div>
+                    <div style="width:100%; height:8px; background:rgba(239,68,68,0.12); border-radius:4px; overflow:hidden;">
+                        <div style="width:${pct}%; height:100%; background:${isFullyPaid ? 'linear-gradient(90deg, #10b981, #34d399)' : 'linear-gradient(90deg, #f59e0b, #fbbf24)'}; border-radius:4px; transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>`;
+
+        // Payment History Table
+        if (payments.length > 0) {
+            html += `
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-muted); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                        📋 Ödeme Geçmişi (${payments.length} işlem)
+                    </div>
+                    <div style="border:1px solid var(--glass-border); border-radius:8px; overflow:hidden;">
+                        <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+                            <thead>
+                                <tr style="background:rgba(255,255,255,0.03);">
+                                    <th style="padding:8px 12px; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">#</th>
+                                    <th style="padding:8px 12px; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">Tarih</th>
+                                    <th style="padding:8px 12px; text-align:right; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">Tutar</th>
+                                    <th style="padding:8px 12px; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">Yapan</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+            let runningTotal = 0;
+            payments.forEach((p, i) => {
+                runningTotal += p.amount;
+                const remainingAfter = tx.amount - runningTotal;
+                html += `
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding:8px 12px; font-weight:600; color:var(--text-muted);">${i + 1}</td>
+                                    <td style="padding:8px 12px;">
+                                        <div style="font-weight:600;">${formatDate(p.date)}</div>
+                                    </td>
+                                    <td style="padding:8px 12px; text-align:right;">
+                                        <span style="font-weight:700; color:var(--success);">${formatCurrency(p.amount)}</span>
+                                        <div style="font-size:0.68rem; color:var(--text-muted);">Kalan: ${formatCurrency(Math.max(0, remainingAfter))}</div>
+                                    </td>
+                                    <td style="padding:8px 12px; font-size:0.78rem; color:var(--text-muted);">
+                                        👤 ${escapeHtml(p.createdBy || 'Bilinmiyor')}
+                                    </td>
+                                </tr>`;
+            });
+
+            html += `
+                            </tbody>
+                            <tfoot>
+                                <tr style="background:rgba(255,255,255,0.03);">
+                                    <td colspan="2" style="padding:8px 12px; font-weight:800; font-size:0.78rem; text-transform:uppercase;">TOPLAM ÖDENEN</td>
+                                    <td style="padding:8px 12px; text-align:right; font-weight:800; color:var(--success); font-size:0.95rem;">${formatCurrency(paidAmount)}</td>
+                                    <td style="padding:8px 12px;"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>`;
+        } else {
+            html += `
+                <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:0.85rem;">
+                    Henüz ödeme kaydı bulunmuyor.
+                </div>`;
+        }
+
+        // Estimation info if available
+        if (tx.estimatedAmount && tx.estimatedAmount > 0) {
+            const diff = tx.amount - tx.estimatedAmount;
+            const diffPct = tx.estimatedAmount > 0 ? ((diff / tx.estimatedAmount) * 100).toFixed(1) : '0';
+            html += `
+                <div style="margin-top:10px; padding:10px 14px; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.15); border-radius:8px; font-size:0.8rem;">
+                    <span style="color:var(--text-muted);">📊 İş Başlangıcı Tahmini:</span>
+                    <strong>${formatCurrency(tx.estimatedAmount)}</strong>
+                    → Anlaşılan: <strong>${formatCurrency(tx.amount)}</strong>
+                    <span style="color:${diff > 0 ? 'var(--danger)' : 'var(--success)'}; font-weight:700;">(${diff > 0 ? '+' : ''}${diffPct}%)</span>
+                </div>`;
+        }
+
+        // Action buttons
+        html += `
+            <div class="form-actions" style="margin-top:18px;">
+                <button type="button" class="btn btn-outline" onclick="App.closeModal()">Kapat</button>
+                ${!isFullyPaid ? `<button type="button" class="btn btn-success" onclick="App.closeModal(); App.markAsPaid('${txId}')">💳 Ödeme Yap</button>` : ''}
+            </div>`;
+
+        openModal('📋 Hesap Mutabakatı', html);
     }
 
     // ─────────────────────────────────────
@@ -3111,6 +3296,7 @@ const App = (() => {
         openOfisSabit,
         saveTransaction,
         markAsPaid,
+        openPaymentHistory,
         executePayment,
         openEditTransaction,
         updateTransaction,
