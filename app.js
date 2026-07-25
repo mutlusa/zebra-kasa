@@ -60,9 +60,156 @@ const App = (() => {
         }
     }
 
+    // ─────────────────────────────────────
+    // FIREBASE REALTIME CLOUD SYNC & PIN AUTH
+    // ─────────────────────────────────────
+    let dbRef = null;
+    let isCloudSyncing = false;
+    const DEFAULT_SYNC_ROOM = 'zebra_kasa_shared_db';
+    const PIN_KEY = 'zebra_team_pin';
+
+    function initCloudSync() {
+        if (typeof firebase === 'undefined') return;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp({
+                    databaseURL: "https://zebra-kasa-default-rtdb.europe-west1.firebasedatabase.app"
+                });
+            }
+            const roomKey = localStorage.getItem('zebra_sync_room') || DEFAULT_SYNC_ROOM;
+            dbRef = firebase.database().ref('rooms/' + roomKey);
+
+            // Listen for live updates from other devices / users
+            dbRef.on('value', (snapshot) => {
+                const cloudData = snapshot.val();
+                if (cloudData && typeof cloudData === 'object' && Array.isArray(cloudData.projects)) {
+                    isCloudSyncing = true;
+                    data = cloudData;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    isCloudSyncing = false;
+
+                    if (currentProjectId) {
+                        renderProjectDetail(currentProjectId);
+                    } else {
+                        renderDashboard();
+                    }
+                }
+            });
+
+            updateSyncBadgeStatus('connected');
+        } catch (err) {
+            console.warn('Bulut senkronizasyon yerel modda başlatıldı:', err);
+            updateSyncBadgeStatus('local');
+        }
+    }
+
+    function syncDataToCloud() {
+        if (isCloudSyncing || !dbRef) return;
+        try {
+            dbRef.set(data);
+        } catch (err) {
+            console.error('Bulut verisi güncellenemedi:', err);
+        }
+    }
+
+    function updateSyncBadgeStatus(status) {
+        const badge = document.getElementById('cloud-sync-badge');
+        if (!badge) return;
+        if (status === 'connected') {
+            badge.innerHTML = `
+                <span style="display:flex; align-items:center; gap:6px; font-weight:700; color:var(--success);">
+                    <span class="dot safe" style="background:#10b981; width:8px; height:8px; display:inline-block; border-radius:50%;"></span>
+                    🟢 Canlı Bulut Senkronize
+                </span>
+                <span style="font-size:0.7rem; color:var(--text-muted);">🔑 Ekip</span>
+            `;
+        } else {
+            badge.innerHTML = `
+                <span style="display:flex; align-items:center; gap:6px; font-weight:700; color:var(--warning);">
+                    <span class="dot" style="background:#f59e0b; width:8px; height:8px; display:inline-block; border-radius:50%;"></span>
+                    🟡 Yerel Kayıt Modu
+                </span>
+            `;
+        }
+    }
+
+    function promptPinLock(targetPin) {
+        const html = `
+            <div style="text-align: center; padding: 10px 0;">
+                <div style="font-size: 3rem; margin-bottom: 10px;">🔐</div>
+                <h3 style="font-weight: 800; margin-bottom: 6px;">Ekip Güvenlik PIN Kodu</h3>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">
+                    Zebra Kasa verilerine erişmek için lütfen 4 haneli PIN kodunu girin.
+                </p>
+                <div class="form-group" style="max-width: 240px; margin: 0 auto 20px auto;">
+                    <input type="password" id="input-lock-pin" class="form-input" maxlength="8" placeholder="••••" style="text-align: center; font-size: 1.5rem; letter-spacing: 8px; font-weight: 800;" autofocus onkeyup="if(event.key==='Enter') App.verifyTeamPin('${targetPin}')">
+                </div>
+                <button class="btn btn-primary" style="width: 100%; max-width: 240px;" onclick="App.verifyTeamPin('${targetPin}')">🚀 Giriş Yap</button>
+            </div>
+        `;
+        openModal('🔐 Güvenlik Doğrulaması', html);
+    }
+
+    function verifyTeamPin(targetPin) {
+        const input = document.getElementById('input-lock-pin')?.value;
+        if (input === targetPin) {
+            sessionStorage.setItem('zebra_pin_unlocked', 'true');
+            closeModal();
+            showToast('Giriş başarılı!', 'success');
+            if (currentProjectId) renderProjectDetail(currentProjectId);
+            else renderDashboard();
+        } else {
+            showToast('Hatalı PIN Kodu!', 'error');
+        }
+    }
+
+    function checkTeamPin() {
+        const savedPin = localStorage.getItem(PIN_KEY);
+        if (!savedPin) return true;
+
+        const sessionUnlocked = sessionStorage.getItem('zebra_pin_unlocked');
+        if (sessionUnlocked === 'true') return true;
+
+        promptPinLock(savedPin);
+        return false;
+    }
+
+    function openPinSettingsModal() {
+        const currentPin = localStorage.getItem(PIN_KEY) || '';
+        const html = `
+            <div class="import-info" style="margin-bottom: 15px;">
+                🔑 <strong>Ekip PIN Kodu & Bulut Ayarları</strong><br>
+                Tüm ekip üyelerinin uygulamaya erişirken kullanacağı ortak PIN kodunu belirleyebilirsiniz.
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="setting-team-pin">Ekip PIN Kodu (Boş bırakılırsa şifresiz açılır)</label>
+                <input class="form-input" type="text" id="setting-team-pin" placeholder="Örn: 1234" value="${escapeHtml(currentPin)}">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" onclick="App.closeModal()">İptal</button>
+                <button type="button" class="btn btn-primary" onclick="App.savePinSettings()">✓ Ayarları Kaydet</button>
+            </div>
+        `;
+        openModal('🔑 Bulut & PIN Ayarları', html);
+    }
+
+    function savePinSettings() {
+        const newPin = document.getElementById('setting-team-pin')?.value.trim() || '';
+        if (newPin) {
+            localStorage.setItem(PIN_KEY, newPin);
+            sessionStorage.setItem('zebra_pin_unlocked', 'true');
+            showToast(`Ekip PIN Kodu güncellendi: ${newPin}`, 'success');
+        } else {
+            localStorage.removeItem(PIN_KEY);
+            showToast('PIN Kodu kaldırıldı.', 'info');
+        }
+        closeModal();
+    }
+
     function saveData() {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            syncDataToCloud();
         } catch (e) {
             console.error('Veri kaydedilirken hata:', e);
             showToast('Veri kaydedilemedi!', 'error');
@@ -2679,7 +2826,11 @@ const App = (() => {
     // ─────────────────────────────────────
     function init() {
         loadData();
-        showDashboard();
+        initCloudSync();
+
+        if (checkTeamPin()) {
+            showDashboard();
+        }
 
         // ESC to close modals
         document.addEventListener('keydown', (e) => {
@@ -2740,7 +2891,10 @@ const App = (() => {
         resetData,
         processReset,
         openChangeResetPasswordModal,
-        saveResetPassword
+        saveResetPassword,
+        verifyTeamPin,
+        openPinSettingsModal,
+        savePinSettings
     };
 
 })();
