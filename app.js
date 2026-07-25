@@ -358,14 +358,12 @@ const App = (() => {
             .reduce((sum, t) => sum + t.amount, 0);
     }
 
-    /** Sum of paid expenses for a project (malzeme + iscilik + ofis-sabit) */
+    /** Sum of paid expenses for a project (malzeme + iscilik + ofis-sabit) — includes partial payments */
     function getProjectExpense(projectId) {
         const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit'];
         return data.transactions
-            .filter(t => t.projectId === projectId
-                      && expenseTypes.includes(t.type)
-                      && t.paymentStatus === 'odendi')
-            .reduce((sum, t) => sum + t.amount, 0);
+            .filter(t => t.projectId === projectId && expenseTypes.includes(t.type))
+            .reduce((sum, t) => sum + getTxPaidAmount(t), 0);
     }
 
     /** Current cash balance for a project */
@@ -396,7 +394,7 @@ const App = (() => {
                 due.setHours(0, 0, 0, 0);
                 return due <= limit;
             })
-            .reduce((sum, t) => sum + t.amount, 0);
+            .reduce((sum, t) => sum + getTxRemainingAmount(t), 0);
     }
 
     /** 30-day risk balance for a project */
@@ -722,9 +720,19 @@ const App = (() => {
             const ds = formatDateShort(tx.dueDate);
             const overdue = isOverdue(tx.dueDate);
             const typeInfo = TX_TYPES[tx.type] || {};
+            const remaining = getTxRemainingAmount(tx);
+            const paidAmt = getTxPaidAmount(tx);
+            const isPartial = paidAmt > 0 && remaining > 0;
+
+            // Partial payment indicator
+            let partialBadge = '';
+            if (isPartial) {
+                const pct = Math.round((paidAmt / tx.amount) * 100);
+                partialBadge = `<span style="font-size:0.65rem; padding:2px 6px; border-radius:4px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:700; white-space:nowrap;">⚠️ %${pct} ödendi</span>`;
+            }
 
             return `
-                <div class="payment-item ${overdue ? 'overdue' : ''}">
+                <div class="payment-item ${overdue ? 'overdue' : ''}" onclick="App.showProject('${tx.projectId}')" style="cursor:pointer;" title="Projeye git: ${project ? escapeHtml(project.name) : ''}">
                     <div class="payment-date">
                         <div class="payment-date-day">${ds.day}</div>
                         <div class="payment-date-month">${ds.month}</div>
@@ -733,10 +741,12 @@ const App = (() => {
                     <div class="payment-info">
                         <div class="payment-desc">${escapeHtml(tx.description || typeInfo.label)}</div>
                         <div class="payment-project">${project ? escapeHtml(project.name) : '—'} · <span style="color:var(--text-secondary); font-size:0.75rem;">${formatDate(tx.dueDate)}</span></div>
+                        ${isPartial ? `<div style="font-size:0.7rem; margin-top:3px; color:var(--text-muted);">Toplam: ${formatCurrency(tx.amount)} · Ödenen: ${formatCurrency(paidAmt)}</div>` : ''}
                     </div>
                     <span class="payment-type-badge">${typeInfo.label || tx.type}</span>
+                    ${partialBadge}
                     ${overdue ? '<span class="payment-overdue-badge">Gecikmiş</span>' : ''}
-                    <span class="payment-amount">-${formatCurrency(tx.amount)}</span>
+                    <span class="payment-amount">-${formatCurrency(remaining)}</span>
                 </div>`;
         }).join('');
     }
@@ -816,15 +826,19 @@ const App = (() => {
         const expenseTxs = txs.filter(t => expenseTypes.includes(t.type));
 
         const agreedExpenseTotal = expenseTxs.reduce((sum, t) => sum + t.amount, 0);
-        const paidExpenseTotal = expenseTxs.filter(t => t.paymentStatus === 'odendi').reduce((sum, t) => sum + t.amount, 0);
+        const paidExpenseTotal = expenseTxs.reduce((sum, t) => sum + getTxPaidAmount(t), 0);
         const agreedExpenseRemaining = Math.max(0, agreedExpenseTotal - paidExpenseTotal);
 
         container.innerHTML = `
             <div class="profit-card">
-                <div class="profit-card-title">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                    Kârlılık ve Kalan Anlaşılan Bakiye Analizi
+                <div class="profit-card-title" onclick="this.parentElement.classList.toggle('collapsed')" style="cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:space-between;">
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        Kârlılık ve Kalan Anlaşılan Bakiye Analizi
+                    </span>
+                    <svg class="collapse-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform 0.3s;"><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
+                <div class="collapsible-body" style="overflow:hidden; transition: max-height 0.35s ease, opacity 0.25s ease;">
                 <div class="profit-grid">
                     <div class="profit-col">
                         <div class="profit-col-header">İş Başlangıcı Tahmini</div>
@@ -872,6 +886,9 @@ const App = (() => {
                     <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); padding: 10px 14px; border-radius: var(--radius-sm);">
                         <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--warning); font-weight: 700;">📋 Kalan Anlaşılan Borç Bakiyesi</div>
                         <div style="font-size: 1.15rem; font-weight: 800; color: var(--warning); margin-top: 2px;">${formatCurrency(agreedExpenseRemaining)}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Toplam Gider: ${formatCurrency(agreedExpenseTotal)} · Ödenen: ${formatCurrency(paidExpenseTotal)}</div>
+                    </div>
+                </div>
                 </div>
             </div>`;
     }
@@ -1008,11 +1025,15 @@ const App = (() => {
         }
 
         container.innerHTML = `
-            <div class="period-flow-card">
-                <div class="period-flow-title">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    Dönemsel Nakit Akışı ve Darboğaz Takibi
+            <div class="period-flow-card collapsed">
+                <div class="period-flow-title" onclick="this.parentElement.classList.toggle('collapsed')" style="cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:space-between;">
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        Dönemsel Nakit Akışı ve Darboğaz Takibi
+                    </span>
+                    <svg class="collapse-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform 0.3s;"><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
+                <div class="collapsible-body" style="overflow:hidden; transition: max-height 0.35s ease, opacity 0.25s ease;">
                 <div class="period-table-wrap">
                     <table class="period-table">
                         <thead>
@@ -1041,6 +1062,7 @@ const App = (() => {
                     </table>
                 </div>
                 ${alertHtml}
+                </div>
             </div>
         `;
     }

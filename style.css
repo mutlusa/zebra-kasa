@@ -1828,3 +1828,46 @@ body::before {
     background: var(--accent-glow);
     color: var(--text-main);
 }
+
+/* ─── Collapsible Cards ─── */
+.profit-card .collapsible-body,
+.period-flow-card .collapsible-body {
+    max-height: 2000px;
+    opacity: 1;
+    transition: max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease;
+}
+
+.profit-card.collapsed .collapsible-body,
+.period-flow-card.collapsed .collapsible-body {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+}
+
+.profit-card.collapsed .profit-card-title,
+.period-flow-card.collapsed .period-flow-title {
+    margin-bottom: 0;
+}
+
+.collapse-arrow {
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.profit-card.collapsed .collapse-arrow,
+.period-flow-card.collapsed .collapse-arrow {
+    transform: rotate(-90deg);
+}
+
+/* Clickable upcoming payment items */
+.payment-item[onclick] {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.payment-item[onclick]:hover {
+    transform: translateX(4px);
+    box-shadow: -3px 0 0 0 var(--accent);
+}
