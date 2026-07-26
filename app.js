@@ -2798,6 +2798,9 @@ const App = (() => {
         const dueDateLabel = showEstimate ? 'Vade Tarihi <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span>' : 'Vade Tarihi';
         const requiredAttr = showEstimate ? '' : 'required';
 
+        let periodSelectHtml = '';
+        let initialAmountStr = '';
+
         const project = getProject(currentProjectId);
         const signed = isContractSigned(project);
         const activeScope = defaultScopeType || (signed ? (type === 'ilave-is' ? 'ilave-is' : 'santiye-ici') : 'sözleşme');
