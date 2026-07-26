@@ -17,6 +17,7 @@ const App = (() => {
         malzeme:            { label: 'Malzeme',                     icon: '🧱', direction: 'expense', cssClass: 'expense' },
         iscilik:            { label: 'İşçilik Gideri (Usta)',       icon: '👷', direction: 'expense', cssClass: 'expense' },
         'iscilik-malzeme':  { label: 'İşçilik + Malzeme (Taşeron)', icon: '🛠️', direction: 'expense', cssClass: 'expense' },
+        'ilave-is':         { label: 'Müşteri İlave İşi (Ek Sözleşme)', icon: '✨', direction: 'expense', cssClass: 'expense' },
         'ofis-sabit':       { label: 'Ofis Sabit Gideri',         icon: '🏢', direction: 'expense', cssClass: 'ofis' },
         'borc-ver':         { label: 'Proje Borç Verme',           icon: '↗️', direction: 'expense', cssClass: 'loan-out' },
         'borc-al':          { label: 'Proje Borç Alma',            icon: '↙️', direction: 'income',  cssClass: 'loan-in' }
@@ -28,8 +29,9 @@ const App = (() => {
     };
 
     const PROJECT_STATUS = {
-        'devam-ediyor': 'Devam Ediyor',
-        'tamamlandi':   'Tamamlandı'
+        'hazirlik':     '📝 Taslak / Bütçeleme',
+        'devam-ediyor': '🏁 Sözleşmeli Aktif Proje',
+        'tamamlandi':   '✅ Tamamlandı / Teslim Edildi'
     };
 
     const PRESET_WORK_CATEGORIES = [
@@ -430,6 +432,59 @@ const App = (() => {
         return data.projects.find(p => p.id === id) || null;
     }
 
+    function isContractSigned(projectOrId) {
+        const project = typeof projectOrId === 'object' ? projectOrId : getProject(projectOrId);
+        if (!project) return false;
+        return project.status === 'devam-ediyor' || project.status === 'tamamlandi' || project.contractSigned === true;
+    }
+
+    function getProjectContractAmount(projectOrId) {
+        const project = typeof projectOrId === 'object' ? projectOrId : getProject(projectOrId);
+        if (!project) return 0;
+        const base = parseFloat(project.contractAmount) || 0;
+        const addonsFromTx = data.transactions
+            .filter(t => t.projectId === project.id && (t.type === 'ilave-is' || t.scopeType === 'ilave-is'))
+            .reduce((sum, t) => sum + (parseFloat(t.clientAddonAmount) || 0), 0);
+        const addonsFromAddons = Array.isArray(project.contractAddons)
+            ? project.contractAddons.reduce((sum, a) => sum + (parseFloat(a.clientAmount) || 0), 0)
+            : 0;
+        return base + addonsFromTx + addonsFromAddons;
+    }
+
+    function getProjectBaseContractAmount(projectOrId) {
+        const project = typeof projectOrId === 'object' ? projectOrId : getProject(projectOrId);
+        return project ? (parseFloat(project.contractAmount) || 0) : 0;
+    }
+
+    function getProjectAddonContractAmount(projectOrId) {
+        const project = typeof projectOrId === 'object' ? projectOrId : getProject(projectOrId);
+        if (!project) return 0;
+        const addonsFromTx = data.transactions
+            .filter(t => t.projectId === project.id && (t.type === 'ilave-is' || t.scopeType === 'ilave-is'))
+            .reduce((sum, t) => sum + (parseFloat(t.clientAddonAmount) || 0), 0);
+        const addonsFromAddons = Array.isArray(project.contractAddons)
+            ? project.contractAddons.reduce((sum, a) => sum + (parseFloat(a.clientAmount) || 0), 0)
+            : 0;
+        return addonsFromTx + addonsFromAddons;
+    }
+
+    function signContract(projectId) {
+        const project = getProject(projectId);
+        if (!project) return;
+        showConfirm(
+            '🏁 Sözleşmeyi İmzala & İşe Başla',
+            `<strong>"${escapeHtml(project.name)}"</strong> projesinin sözleşmesi resmen imzalandı olarak işaretlenecek ve başlangıç bütçesi dondurulacak.<br><br>Şantiye sürecinde girilen yeni şantiye harcamalarında tahmini maliyet otomatik 0 ₺ kabul edilecek. Devam edilsin mi?`,
+            () => {
+                project.status = 'devam-ediyor';
+                project.contractSigned = true;
+                project.signedAt = todayStr();
+                saveData();
+                showToast('🏁 Sözleşme resmen imzalandı! Başlangıç bütçesi donduruldu.', 'success');
+                renderProjectDetail(projectId);
+            }
+        );
+    }
+
     // ─────────────────────────────────────
     // DATA LAYER — CRUD: Transactions
     // ─────────────────────────────────────
@@ -446,10 +501,28 @@ const App = (() => {
         return Math.max(0, tx.amount - paid);
     }
 
-    function addTransaction(type, projectId, amount, paymentStatus, dueDate, description, estimatedAmount, period, vendor) {
+    function addTransaction(type, projectId, amount, paymentStatus, dueDate, description, estimatedAmount, period, vendor, scopeType, clientAddonAmount) {
         const currentUser = getUserName();
         const amtVal = parseFloat(amount) || 0;
         const isPaid = (paymentStatus === 'odendi');
+        const project = getProject(projectId);
+        const signed = isContractSigned(project);
+
+        let finalScopeType = scopeType;
+        if (!finalScopeType) {
+            if (type === 'ilave-is') {
+                finalScopeType = 'ilave-is';
+            } else if (signed && ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'].includes(type)) {
+                finalScopeType = 'santiye-ici';
+            } else {
+                finalScopeType = 'sözleşme';
+            }
+        }
+
+        let finalEstimated = estimatedAmount;
+        if (finalScopeType === 'santiye-ici') {
+            finalEstimated = 0;
+        }
 
         const tx = {
             id: generateId(),
@@ -462,12 +535,18 @@ const App = (() => {
             description: (description || '').trim(),
             vendor: (vendor || '').trim(),
             period: parseInt(period) || 0,
+            scopeType: finalScopeType,
             createdBy: currentUser,
             createdAt: new Date().toISOString(),
             payments: isPaid && amtVal > 0 ? [{ id: generateId(), amount: amtVal, date: todayStr(), createdBy: currentUser }] : []
         };
-        if (estimatedAmount !== undefined && estimatedAmount !== null && estimatedAmount !== '') {
-            tx.estimatedAmount = parseFloat(estimatedAmount) || 0;
+
+        if (finalScopeType === 'ilave-is' && clientAddonAmount !== undefined && clientAddonAmount !== null) {
+            tx.clientAddonAmount = parseFloat(clientAddonAmount) || 0;
+        }
+
+        if (finalEstimated !== undefined && finalEstimated !== null && finalEstimated !== '') {
+            tx.estimatedAmount = parseFloat(finalEstimated) || 0;
         }
         data.transactions.push(tx);
         saveData();
@@ -959,12 +1038,40 @@ const App = (() => {
 
         // Header info
         document.getElementById('detail-project-name').textContent = project.name;
-        document.getElementById('detail-contract-amount').textContent = formatCurrency(project.contractAmount);
+        
+        const totalContract = getProjectContractAmount(projectId);
+        const baseContract = getProjectBaseContractAmount(projectId);
+        const addonContract = getProjectAddonContractAmount(projectId);
+
+        const contractEl = document.getElementById('detail-contract-amount');
+        if (contractEl) {
+            if (addonContract > 0) {
+                contractEl.innerHTML = `
+                    ${formatCurrency(totalContract)}
+                    <span style="font-size:0.72rem; font-weight:600; color:var(--text-muted); font-family:sans-serif; display:block; margin-top:2px;">
+                        (Orijinal: ${formatCurrency(baseContract)} + Ek Sözleşmeler: +${formatCurrency(addonContract)})
+                    </span>
+                `;
+            } else {
+                contractEl.textContent = formatCurrency(totalContract);
+            }
+        }
 
         const statusBadge = document.getElementById('detail-status-badge');
         if (statusBadge) {
-            statusBadge.textContent = PROJECT_STATUS[project.status] || project.status;
-            statusBadge.className = 'badge ' + (project.status === 'tamamlandi' ? 'badge-muted' : 'badge-success');
+            if (project.status === 'hazirlik') {
+                statusBadge.innerHTML = `
+                    📝 Taslak / Bütçeleme
+                    <button type="button" class="btn btn-xs btn-success" onclick="App.signContract('${projectId}')" style="margin-left:8px; font-weight:700;">🏁 Sözleşmeyi İmzala & İşe Başla</button>
+                `;
+                statusBadge.className = 'badge badge-warning';
+            } else if (project.status === 'tamamlandi') {
+                statusBadge.textContent = '✅ Tamamlandı';
+                statusBadge.className = 'badge badge-muted';
+            } else {
+                statusBadge.textContent = '🏁 Sözleşmeli Aktif Proje';
+                statusBadge.className = 'badge badge-success';
+            }
         }
 
         // Stats
@@ -1437,12 +1544,20 @@ const App = (() => {
         const descWithIcon = workIcon ? `${workIcon} ${escapeHtml(tx.description || typeInfo.label)}` : escapeHtml(tx.description || typeInfo.label);
         const vendorLine = tx.vendor ? `<div style="font-size:0.75rem; font-weight:700; color:var(--accent); margin-top:2px;">🏢 ${escapeHtml(tx.vendor)}</div>` : '';
 
+        let scopeBadge = '';
+        if (tx.scopeType === 'santiye-ici') {
+            scopeBadge = `<div style="font-size:0.7rem; color:#f59e0b; margin-top:2px; font-weight:700;">🔨 Şantiye İçi Unutulan İş (Tahmini: 0 ₺)</div>`;
+        } else if (tx.scopeType === 'ilave-is' || tx.type === 'ilave-is') {
+            scopeBadge = `<div style="font-size:0.7rem; color:var(--success); margin-top:2px; font-weight:700;">✨ Ek Sözleşme (+${formatCurrency(tx.clientAddonAmount || 0)} Müşteri Alacağı)</div>`;
+        }
+
         return `
             <div class="transaction-item">
                 <div class="tx-icon ${typeInfo.cssClass || ''}">${workIcon || typeInfo.icon || '📄'}</div>
                 <div class="tx-info">
                     <div class="tx-desc">${descWithIcon}</div>
                     ${vendorLine}
+                    ${scopeBadge}
                     <div class="tx-date">${dateLabelText} · ${typeInfo.label}${periodLabelText}</div>
                     ${estimateLine}
                     ${createdByLine}
@@ -1705,7 +1820,8 @@ const App = (() => {
     function getProjectFormHtml(project = null) {
         const name = project ? escapeHtml(project.name) : '';
         const amount = project ? (project.contractAmount ? project.contractAmount.toLocaleString('tr-TR') : '') : '';
-        const statusDevam = (!project || project.status === 'devam-ediyor') ? 'selected' : '';
+        const statusHazirlik = (project && project.status === 'hazirlik') ? 'selected' : '';
+        const statusDevam = ((project && project.status === 'devam-ediyor') || !project) ? 'selected' : '';
         const statusTamam = (project && project.status === 'tamamlandi') ? 'selected' : '';
         let periodCount = 0;
         if (project) {
@@ -1730,10 +1846,11 @@ const App = (() => {
                     <input class="form-input" type="text" inputmode="numeric" id="input-contract-amount" value="${amount}" placeholder="0" required oninput="App.onContractAmountInput(this)" onkeydown="App.onAmountKeyDown(event)">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="input-project-status" onchange="App.saveProjectDraft()">Durumu</label>
+                    <label class="form-label" for="input-project-status" onchange="App.saveProjectDraft()">Aşama / Durum</label>
                     <select class="form-select" id="input-project-status">
-                        <option value="devam-ediyor" ${statusDevam}>Devam Ediyor</option>
-                        <option value="tamamlandi" ${statusTamam}>Tamamlandı</option>
+                        <option value="hazirlik" ${statusHazirlik}>📝 Taslak / Hazırlık (İmza Öncesi Bütçeleme)</option>
+                        <option value="devam-ediyor" ${statusDevam}>🏁 Sözleşme İmzalandı / İşe Başlandı</option>
+                        <option value="tamamlandi" ${statusTamam}>✅ Tamamlandı / Teslim Edildi</option>
                     </select>
                 </div>
 
@@ -2184,6 +2301,94 @@ const App = (() => {
     function openIscilik() { openGider('iscilik'); }
     function openTaseron() { openGider('iscilik-malzeme'); }
 
+    function openIlaveIsModal() {
+        if (!currentProjectId) return;
+        const project = getProject(currentProjectId);
+        if (!project) return;
+
+        const vendorSuggestions = getVendorSuggestions();
+        const datalistHtml = vendorSuggestions.length > 0 ? `
+            <datalist id="vendor-suggestions-list">
+                ${vendorSuggestions.map(v => `<option value="${escapeHtml(v)}">`).join('')}
+            </datalist>
+        ` : '';
+
+        const html = `
+            <form onsubmit="App.saveIlaveIs(event)">
+                <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.2); padding:12px; border-radius:8px; margin-bottom:14px; font-size:0.83rem; color:var(--text-main);">
+                    ✨ <strong>Müşteri İlave İş Sözleşmesi (Ek Hakediş)</strong><br>
+                    <span style="font-size:0.78rem; color:var(--text-muted);">Müşteri tarafından onaylanmış sözleşme dışı ek iş. Müşteriden alınacak tutar projenin toplam alacağına eklenir.</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="input-addon-title">İlave İş / Ek Sözleşme Adı</label>
+                    <input class="form-input" type="text" id="input-addon-title" placeholder="Örn: Ekstra Teras Kaplama & Banyo Dolabı" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="input-addon-client-amount">Müşteriden Alınacak Ek Sözleşme Tutarı (₺)</label>
+                    <input class="form-input" type="text" inputmode="numeric" id="input-addon-client-amount" placeholder="0" required oninput="App.formatAmountInput(this)">
+                    <div style="font-size:0.72rem; color:var(--text-muted); margin-top:3px;">Bu miktar müşterinin toplam sözleşme alacağına ve hakedişine eklenir.</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="input-addon-cost-amount">Maliyeti / Ustaya Anlaşılan Harcama Tutarı (₺) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
+                    <input class="form-input" type="text" inputmode="numeric" id="input-addon-cost-amount" placeholder="Opsiyonel" oninput="App.formatAmountInput(this)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="input-addon-vendor">Firma / Taşeron / Usta (Alacaklı) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
+                    <input class="form-input" type="text" id="input-addon-vendor" list="vendor-suggestions-list" placeholder="Örn: Mermer A.Ş., Ahmet Usta" autocomplete="off">
+                    ${datalistHtml}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="input-addon-due-date">Vade Tarihi <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
+                    <input class="form-input" type="date" id="input-addon-due-date" value="">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline" onclick="App.closeModal()">İptal</button>
+                    <button type="submit" class="btn btn-success">✨ Ek Sözleşmeyi Kaydet</button>
+                </div>
+            </form>
+        `;
+        openModal('✨ Müşteri İlave İş Sözleşmesi Ekle', html);
+    }
+
+    function saveIlaveIs(e) {
+        e.preventDefault();
+        if (!currentProjectId) return;
+
+        const title = document.getElementById('input-addon-title').value.trim();
+        const clientAmount = parseAmountInput(document.getElementById('input-addon-client-amount'));
+        const costAmount = parseAmountInput(document.getElementById('input-addon-cost-amount'));
+        const vendor = document.getElementById('input-addon-vendor').value.trim();
+        const dueDate = document.getElementById('input-addon-due-date').value || '';
+
+        if (!title) {
+            showToast('Lütfen ilave iş adını girin.', 'error');
+            return;
+        }
+
+        if (clientAmount < 0) {
+            showToast('Müşteri alacak tutarı sıfırdan küçük olamaz.', 'error');
+            return;
+        }
+
+        addTransaction(
+            'ilave-is',
+            currentProjectId,
+            costAmount,
+            'bekliyor',
+            dueDate,
+            `✨ Ek Sözleşme: ${title}`,
+            costAmount,
+            0,
+            vendor,
+            'ilave-is',
+            clientAmount
+        );
+
+        showToast(`✨ Ek Sözleşme Kaydedildi! Müşteri alacağına +${formatCurrency(clientAmount)} eklendi.`, 'success');
+        closeModal();
+        renderProjectDetail(currentProjectId);
+    }
+
     function openOfisSabit() {
         if (!currentProjectId) return;
         openModal('🏢 Ofis Gideri Yansıt', getTransactionFormHtml({
@@ -2407,7 +2612,54 @@ const App = (() => {
         }
     }
 
-    function getTransactionFormHtml({ type, allowTypeSelect, statusLocked, showDueDate, showEstimate, submitLabel = 'Kaydet', submitClass = 'btn-primary' }) {
+    function switchScopeType(scopeType) {
+        const inputScope = document.getElementById('input-tx-scope-type');
+        if (inputScope) inputScope.value = scopeType;
+
+        const grid = document.getElementById('scope-type-selector-grid');
+        if (grid) {
+            const btns = grid.querySelectorAll('.btn-scope-type');
+            btns.forEach(btn => {
+                const val = btn.getAttribute('data-scope');
+                if (val === scopeType) {
+                    btn.classList.add('active');
+                    btn.style.background = 'rgba(99,102,241,0.25)';
+                    btn.style.borderColor = 'var(--accent)';
+                    btn.style.color = '#ffffff';
+                } else {
+                    btn.classList.remove('active');
+                    btn.style.background = 'rgba(255,255,255,0.03)';
+                    btn.style.borderColor = 'var(--glass-border)';
+                    btn.style.color = 'var(--text-muted)';
+                }
+            });
+        }
+
+        const estInput = document.getElementById('input-tx-estimated');
+        const estNote = document.getElementById('note-tx-estimated');
+        const addonGroup = document.getElementById('group-client-addon');
+
+        if (scopeType === 'santiye-ici') {
+            if (estInput) {
+                estInput.value = '0';
+                estInput.disabled = true;
+            }
+            if (estNote) estNote.style.display = 'block';
+            if (addonGroup) addonGroup.style.display = 'none';
+        } else if (scopeType === 'ilave-is') {
+            if (estInput) {
+                estInput.disabled = false;
+            }
+            if (estNote) estNote.style.display = 'none';
+            if (addonGroup) addonGroup.style.display = 'block';
+        } else {
+            if (estInput) estInput.disabled = false;
+            if (estNote) estNote.style.display = 'none';
+            if (addonGroup) addonGroup.style.display = 'none';
+        }
+    }
+
+    function getTransactionFormHtml({ type, allowTypeSelect, statusLocked, showDueDate, showEstimate, submitLabel = 'Kaydet', submitClass = 'btn-primary', defaultScopeType }) {
         const typeInfo = TX_TYPES[type] || {};
 
         const amountLabel = showEstimate ? 'Anlaşılan / Fatura Tutarı (₺) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span>' : 'Tutar (₺)';
@@ -2415,6 +2667,9 @@ const App = (() => {
         const requiredAttr = showEstimate ? '' : 'required';
 
         const project = getProject(currentProjectId);
+        const signed = isContractSigned(project);
+        const activeScope = defaultScopeType || (signed ? (type === 'ilave-is' ? 'ilave-is' : 'santiye-ici') : 'sözleşme');
+
         let periodSelectHtml = '';
         let initialAmountStr = '';
 
@@ -2494,9 +2749,37 @@ const App = (() => {
                 </div>`;
         }
 
+        let scopeSelectHtml = '';
+        if (signed && type !== 'hakedis') {
+            scopeSelectHtml = `
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label class="form-label">Kapsam Türü Seçin</label>
+                    <div id="scope-type-selector-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                        <button type="button" class="btn-scope-type ${activeScope === 'santiye-ici' ? 'active' : ''}" data-scope="santiye-ici" onclick="App.switchScopeType('santiye-ici')" style="padding:10px; font-size:0.8rem; border-radius:8px; display:flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; background:${activeScope === 'santiye-ici' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${activeScope === 'santiye-ici' ? 'var(--accent)' : 'var(--glass-border)'}; color:${activeScope === 'santiye-ici' ? '#ffffff' : 'var(--text-muted)'};">
+                            <span>🔨</span> <span>Şantiye İçi / Unutulan İş</span>
+                        </button>
+                        <button type="button" class="btn-scope-type ${activeScope === 'ilave-is' ? 'active' : ''}" data-scope="ilave-is" onclick="App.switchScopeType('ilave-is')" style="padding:10px; font-size:0.8rem; border-radius:8px; display:flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; background:${activeScope === 'ilave-is' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${activeScope === 'ilave-is' ? 'var(--accent)' : 'var(--glass-border)'}; color:${activeScope === 'ilave-is' ? '#ffffff' : 'var(--text-muted)'};">
+                            <span>✨</span> <span>Müşteri İlave İşi</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="input-tx-scope-type" value="${activeScope}">
+                </div>
+            `;
+        } else {
+            scopeSelectHtml = `<input type="hidden" id="input-tx-scope-type" value="${activeScope}">`;
+        }
+
+        const isSantiyeIci = activeScope === 'santiye-ici';
+
         return `
             <form onsubmit="App.saveTransaction(event, '${type}', '${statusLocked}')">
                 ${typeFieldHtml}
+                ${scopeSelectHtml}
+                <div class="form-group" id="group-client-addon" style="display:${activeScope === 'ilave-is' ? 'block' : 'none'}; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); padding:10px 12px; border-radius:8px; margin-bottom:14px;">
+                    <label class="form-label" for="input-client-addon-amount" style="color:#f59e0b; font-weight:700;">Müşteriden Alınacak Ek Sözleşme Tutarı (₺)</label>
+                    <input class="form-input" type="text" inputmode="numeric" id="input-client-addon-amount" placeholder="0" oninput="App.formatAmountInput(this)">
+                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Bu tutar müşterinin toplam sözleşme alacağına eklenir.</div>
+                </div>
                 <div class="form-group">
                     <label class="form-label" for="input-tx-vendor">Firma / Usta / Taşeron (Alacaklı) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
                     <input class="form-input" type="text" id="input-tx-vendor" list="vendor-suggestions-list" placeholder="Örn: ABC Yapı, Ahmet Usta, Demir A.Ş." autocomplete="off">
@@ -2504,9 +2787,10 @@ const App = (() => {
                 </div>
                 ${periodSelectHtml}
                 ${showEstimate ? `
-                <div class="form-group">
-                    <label class="form-label" for="input-tx-estimated">Tahmini Maliyet (₺) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— iş başlangıcı bütçe tahmini</span></label>
-                    <input class="form-input" type="text" inputmode="numeric" id="input-tx-estimated" placeholder="Opsiyonel" oninput="App.formatAmountInput(this)">
+                <div class="form-group" id="group-tx-estimated">
+                    <label class="form-label" for="input-tx-estimated">Tahmini Maliyet (₺) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— bütçe tahmini</span></label>
+                    <input class="form-input" type="text" inputmode="numeric" id="input-tx-estimated" value="${isSantiyeIci ? '0' : ''}" placeholder="Opsiyonel" ${isSantiyeIci ? 'disabled' : ''} oninput="App.formatAmountInput(this)">
+                    <div id="note-tx-estimated" style="display:${isSantiyeIci ? 'block' : 'none'}; font-size:0.72rem; color:#f59e0b; margin-top:3px; font-weight:600;">🔒 Sözleşme imzalandığı için şantiye içi harcamalarda tahmini maliyet 0 ₺ kilitlenmiştir.</div>
                 </div>
                 ` : ''}
                 <div class="form-group">
@@ -2551,6 +2835,12 @@ const App = (() => {
         const periodEl = document.getElementById('input-tx-period');
         const period = periodEl ? parseInt(periodEl.value) || 0 : 0;
 
+        const scopeEl = document.getElementById('input-tx-scope-type');
+        const scopeType = scopeEl ? scopeEl.value : undefined;
+
+        const addonAmtEl = document.getElementById('input-client-addon-amount');
+        const clientAddonAmount = addonAmtEl ? parseAmountInput(addonAmtEl) : 0;
+
         // Allow 0 amounts (e.g. for logging items without cost/income or adjustments)
         if (type === 'hakedis' && amount < 0) {
             showToast('Tahsilat tutarı sıfırdan küçük olamaz.', 'error');
@@ -2562,7 +2852,7 @@ const App = (() => {
             return;
         }
 
-        addTransaction(type, currentProjectId, amount, statusLocked, dueDate, description, estimatedAmount, period, vendor);
+        addTransaction(type, currentProjectId, amount, statusLocked, dueDate, description, estimatedAmount, period, vendor, scopeType, clientAddonAmount);
 
         const typeInfo = TX_TYPES[type] || {};
         showToast(`${typeInfo.label} kaydedildi!`, 'success');
@@ -3953,8 +4243,13 @@ const App = (() => {
         onAmountKeyDown,
         onPayAmountInput,
         onPayModeChange,
-        onTxPeriodSelectChange,
         switchTxType,
+        switchScopeType,
+        isContractSigned,
+        signContract,
+        openIlaveIsModal,
+        saveIlaveIs,
+        getProjectContractAmount,
         setActiveTxSort,
         handleOverlayClick,
         openHakedis,
