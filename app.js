@@ -99,6 +99,15 @@ const App = (() => {
     let data = { projects: [], transactions: [] };
     let currentProjectId = null;
     let confirmCallback = null;
+    let activeSortMode = localStorage.getItem('zebraActiveSortMode') || 'date';
+
+    function setActiveTxSort(mode) {
+        activeSortMode = mode;
+        try { localStorage.setItem('zebraActiveSortMode', mode); } catch (e) {}
+        if (currentProjectId) {
+            renderProjectDetail(currentProjectId);
+        }
+    }
 
     // ─────────────────────────────────────
     // DATA LAYER — Storage
@@ -1281,17 +1290,42 @@ const App = (() => {
         const activeTxs = txs.filter(t => t.paymentStatus === 'bekliyor');
         const completedTxs = txs.filter(t => t.paymentStatus === 'odendi');
 
+        // Sort activeTxs by Date or Period
+        if (activeSortMode === 'period') {
+            activeTxs.sort((a, b) => {
+                const pA = a.period > 0 ? a.period : 999;
+                const pB = b.period > 0 ? b.period : 999;
+                if (pA !== pB) return pA - pB;
+                const dateA = getTxDueDate(a) || '9999-12-31';
+                const dateB = getTxDueDate(b) || '9999-12-31';
+                return dateA.localeCompare(dateB);
+            });
+        } else {
+            activeTxs.sort((a, b) => {
+                const dateA = getTxDueDate(a) || '9999-12-31';
+                const dateB = getTxDueDate(b) || '9999-12-31';
+                return dateA.localeCompare(dateB);
+            });
+        }
+
         let html = '';
 
         // ── ACTIVE SECTION ──
         if (activeTxs.length > 0) {
             html += `
                 <div style="margin-bottom:8px;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                        <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--warning);">
-                            ⏳ Aktif Borçlar & Bekleyen İşlemler
-                        </span>
-                        <span style="font-size:0.68rem; padding:2px 8px; border-radius:10px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:700;">${activeTxs.length}</span>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--warning);">
+                                ⏳ Aktif Borçlar & Bekleyen İşlemler
+                            </span>
+                            <span style="font-size:0.68rem; padding:2px 8px; border-radius:10px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:700;">${activeTxs.length}</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:4px; font-size:0.72rem;">
+                            <span style="color:var(--text-muted); font-weight:600;">Sırala:</span>
+                            <button type="button" class="btn btn-xs ${activeSortMode === 'date' ? 'btn-primary' : 'btn-outline'}" onclick="App.setActiveTxSort('date')" style="padding:2px 8px; font-size:0.7rem;">📅 Tarihe Göre</button>
+                            <button type="button" class="btn btn-xs ${activeSortMode === 'period' ? 'btn-primary' : 'btn-outline'}" onclick="App.setActiveTxSort('period')" style="padding:2px 8px; font-size:0.7rem;">📊 Döneme Göre</button>
+                        </div>
                     </div>
                     ${activeTxs.map(tx => renderTxCard(tx, projectId)).join('')}
                 </div>`;
@@ -1510,6 +1544,7 @@ const App = (() => {
                                 <tr style="background:rgba(255,255,255,0.03);">
                                     <th style="padding:8px 12px; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">#</th>
                                     <th style="padding:8px 12px; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">Tarih</th>
+                                    <th style="padding:8px 12px; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">Açıklama / Dekont</th>
                                     <th style="padding:8px 12px; text-align:right; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">Tutar</th>
                                     <th style="padding:8px 12px; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:600; border-bottom:1px solid var(--glass-border);">Yapan</th>
                                 </tr>
@@ -1526,6 +1561,9 @@ const App = (() => {
                                     <td style="padding:8px 12px;">
                                         <div style="font-weight:600;">${formatDate(p.date)}</div>
                                     </td>
+                                    <td style="padding:8px 12px;">
+                                        <span style="font-size:0.78rem; font-weight:600; color:var(--text-main);">${p.note ? `📝 ${escapeHtml(p.note)}` : '—'}</span>
+                                    </td>
                                     <td style="padding:8px 12px; text-align:right;">
                                         <span style="font-weight:700; color:var(--success);">${formatCurrency(p.amount)}</span>
                                         <div style="font-size:0.68rem; color:var(--text-muted);">Kalan: ${formatCurrency(Math.max(0, remainingAfter))}</div>
@@ -1540,7 +1578,7 @@ const App = (() => {
                             </tbody>
                             <tfoot>
                                 <tr style="background:rgba(255,255,255,0.03);">
-                                    <td colspan="2" style="padding:8px 12px; font-weight:800; font-size:0.78rem; text-transform:uppercase;">TOPLAM ÖDENEN</td>
+                                    <td colspan="3" style="padding:8px 12px; font-weight:800; font-size:0.78rem; text-transform:uppercase;">TOPLAM ÖDENEN</td>
                                     <td style="padding:8px 12px; text-align:right; font-weight:800; color:var(--success); font-size:0.95rem;">${formatCurrency(paidAmount)}</td>
                                     <td style="padding:8px 12px;"></td>
                                 </tr>
@@ -2547,8 +2585,11 @@ const App = (() => {
         if (tx.payments && tx.payments.length > 0) {
             const rows = tx.payments.map((p, i) => `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:rgba(16,185,129,0.06); border-radius:6px; margin-bottom:4px; font-size:0.82rem;">
-                    <span style="color:var(--success); font-weight:600;">#${i + 1} · ${formatCurrency(p.amount)}</span>
-                    <span style="color:var(--text-muted);">📅 ${formatDate(p.date)} · 👤 ${escapeHtml(p.createdBy || 'Bilinmiyor')}</span>
+                    <div>
+                        <span style="color:var(--success); font-weight:600;">#${i + 1} · ${formatCurrency(p.amount)}</span>
+                        ${p.note ? `<div style="font-size:0.75rem; color:var(--text-main); font-weight:600; margin-top:2px;">📝 ${escapeHtml(p.note)}</div>` : ''}
+                    </div>
+                    <span style="color:var(--text-muted); font-size:0.75rem;">📅 ${formatDate(p.date)} · 👤 ${escapeHtml(p.createdBy || 'Bilinmiyor')}</span>
                 </div>
             `).join('');
             paymentHistoryHtml = `
@@ -2612,6 +2653,10 @@ const App = (() => {
                     <input class="form-input" type="text" inputmode="numeric" id="input-pay-amount"
                            value="${remaining > 0 ? remaining.toLocaleString('tr-TR') : tx.amount.toLocaleString('tr-TR')}"
                            oninput="App.onPayAmountInput(this, ${remaining > 0 ? remaining : tx.amount})" onkeydown="App.onAmountKeyDown(event)" required autofocus>
+                </div>
+                <div class="form-group" style="margin-top:12px;">
+                    <label class="form-label" for="input-pay-note">Ödeme / Dekont Açıklaması <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
+                    <input class="form-input" type="text" id="input-pay-note" placeholder="Örn: Garanti Bankası Havale, Nakit, Dekont No: 12345">
                 </div>
 
                 <div id="partial-payment-box" style="display:none; background: rgba(239, 68, 68, 0.08); border: 1.5px dashed rgba(239, 68, 68, 0.4); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
@@ -2686,6 +2731,8 @@ const App = (() => {
         if (!tx) return;
 
         const payAmount = parseAmountInput(document.getElementById('input-pay-amount'));
+        const payNoteEl = document.getElementById('input-pay-note');
+        const payNote = payNoteEl ? payNoteEl.value.trim() : '';
         const currentUser = getUserName();
         const remaining = getTxRemainingAmount(tx);
 
@@ -2705,6 +2752,7 @@ const App = (() => {
             id: generateId(),
             amount: payAmount,
             date: todayStr(),
+            note: payNote,
             createdBy: currentUser
         });
 
@@ -3907,6 +3955,7 @@ const App = (() => {
         onPayModeChange,
         onTxPeriodSelectChange,
         switchTxType,
+        setActiveTxSort,
         handleOverlayClick,
         openHakedis,
         openGider,
