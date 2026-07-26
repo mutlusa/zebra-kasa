@@ -14,7 +14,7 @@ const App = (() => {
 
     const TX_TYPES = {
         hakedis:            { label: 'Müşteri Ödemesi',             icon: '💰', direction: 'income',  cssClass: 'income' },
-        malzeme:            { label: 'Malzeme Ödemesi',             icon: '🧱', direction: 'expense', cssClass: 'expense' },
+        malzeme:            { label: 'Malzeme',                     icon: '🧱', direction: 'expense', cssClass: 'expense' },
         iscilik:            { label: 'İşçilik Gideri (Usta)',       icon: '👷', direction: 'expense', cssClass: 'expense' },
         'iscilik-malzeme':  { label: 'İşçilik + Malzeme (Taşeron)', icon: '🛠️', direction: 'expense', cssClass: 'expense' },
         'ofis-sabit':       { label: 'Ofis Sabit Gideri',         icon: '🏢', direction: 'expense', cssClass: 'ofis' },
@@ -2433,7 +2433,7 @@ const App = (() => {
                     <label class="form-label">İşlem Tipi Seçin</label>
                     <div id="tx-type-selector-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
                         <button type="button" class="btn-tx-type ${type === 'malzeme' ? 'active' : ''}" data-type="malzeme" onclick="App.switchTxType('malzeme')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${type === 'malzeme' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${type === 'malzeme' ? 'var(--accent)' : 'var(--glass-border)'}; color:${type === 'malzeme' ? '#ffffff' : 'var(--text-muted)'};">
-                            <span>🧱</span> <span>Malzeme Ödemesi</span>
+                            <span>🧱</span> <span>Malzeme</span>
                         </button>
                         <button type="button" class="btn-tx-type ${type === 'iscilik' ? 'active' : ''}" data-type="iscilik" onclick="App.switchTxType('iscilik')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${type === 'iscilik' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${type === 'iscilik' ? 'var(--accent)' : 'var(--glass-border)'}; color:${type === 'iscilik' ? '#ffffff' : 'var(--text-muted)'};">
                             <span>👷</span> <span>İşçilik Gideri (Usta)</span>
@@ -2878,9 +2878,9 @@ const App = (() => {
     }
 
     function handleOverlayClick(e) {
-        if (e.target.id === 'modal-overlay') {
-            closeModal();
-        }
+        // Prevent accidental closing when clicking outside the modal box while entering data.
+        // User must explicitly click "İptal", "✕" or "Kaydet".
+        return;
     }
 
     // ─────────────────────────────────────
@@ -3525,7 +3525,7 @@ const App = (() => {
                         <label class="form-label">İşlem Tipi</label>
                         <select class="form-select" id="import-tx-type">
                             <option value="auto" selected>✨ Otomatik Algıla (İşçilik & Malzeme Karma)</option>
-                            <option value="malzeme">Tüm Satırlar: Malzeme Ödemesi</option>
+                            <option value="malzeme">Tüm Satırlar: Malzeme</option>
                             <option value="iscilik">Tüm Satırlar: İşçilik Gideri</option>
                             <option value="ofis-sabit">Tüm Satırlar: Ofis Sabit Gideri</option>
                         </select>
@@ -3727,7 +3727,7 @@ const App = (() => {
         } else {
             typeSelectHtml = `
                 <select class="form-select" id="input-tx-type">
-                    <option value="malzeme" ${tx.type === 'malzeme' ? 'selected' : ''}>🧱 Malzeme Ödemesi</option>
+                    <option value="malzeme" ${tx.type === 'malzeme' ? 'selected' : ''}>🧱 Malzeme</option>
                     <option value="iscilik" ${tx.type === 'iscilik' ? 'selected' : ''}>👷 İşçilik Gideri (Usta)</option>
                     <option value="iscilik-malzeme" ${tx.type === 'iscilik-malzeme' ? 'selected' : ''}>🛠️ İşçilik + Malzeme (Taşeron)</option>
                     <option value="hakedis" ${tx.type === 'hakedis' ? 'selected' : ''}>💰 Müşteri Ödemesi</option>
