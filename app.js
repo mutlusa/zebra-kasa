@@ -3641,15 +3641,14 @@ const App = (() => {
         const estimatedEl = document.getElementById('input-tx-estimated');
         const estimatedAmount = estimatedEl ? parseAmountInput(estimatedEl) : 0;
 
-        // If it's hakedis, we require amount.
-        if (tx.type === 'hakedis' && amount <= 0) {
-            showToast('Hakediş tutarı 0\'dan büyük olmalıdır.', 'error');
+        // Allow 0 amounts for edited transactions as well
+        if (tx.type === 'hakedis' && amount < 0) {
+            showToast('Tahsilat tutarı sıfırdan küçük olamaz.', 'error');
             return;
         }
 
-        // For expenses, at least one of estimatedAmount or amount must be > 0.
-        if (tx.type !== 'hakedis' && amount <= 0 && estimatedAmount <= 0) {
-            showToast('Lütfen tahmini maliyet veya anlaşılan tutardan en az birini girin.', 'error');
+        if (tx.type !== 'hakedis' && amount < 0 && estimatedAmount < 0) {
+            showToast('Lütfen geçerli bir tutar girin.', 'error');
             return;
         }
 
