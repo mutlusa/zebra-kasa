@@ -2131,13 +2131,13 @@ const App = (() => {
 
     function openGider(defaultType = 'malzeme') {
         if (!currentProjectId) return;
-        openModal('📦 Proje Gideri / Anlaşma Ekle', getTransactionFormHtml({
+        openModal('📦 Proje Maliyet / Ödeme Ekle', getTransactionFormHtml({
             type: defaultType,
             allowTypeSelect: true,
             statusLocked: 'bekliyor',
             showDueDate: true,
             showEstimate: true,
-            submitLabel: 'Gider Ekle',
+            submitLabel: 'Kaydet',
             submitClass: 'btn-warning'
         }));
     }
@@ -2345,6 +2345,30 @@ const App = (() => {
         return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
     }
 
+    function switchTxType(targetType) {
+        const typeInput = document.getElementById('input-tx-type');
+        if (typeInput) typeInput.value = targetType;
+
+        const container = document.getElementById('tx-type-selector-grid');
+        if (container) {
+            const btns = container.querySelectorAll('.btn-tx-type');
+            btns.forEach(btn => {
+                const val = btn.getAttribute('data-type');
+                if (val === targetType) {
+                    btn.classList.add('active');
+                    btn.style.background = 'rgba(99,102,241,0.25)';
+                    btn.style.borderColor = 'var(--accent)';
+                    btn.style.color = '#ffffff';
+                } else {
+                    btn.classList.remove('active');
+                    btn.style.background = 'rgba(255,255,255,0.03)';
+                    btn.style.borderColor = 'var(--glass-border)';
+                    btn.style.color = 'var(--text-muted)';
+                }
+            });
+        }
+    }
+
     function getTransactionFormHtml({ type, allowTypeSelect, statusLocked, showDueDate, showEstimate, submitLabel = 'Kaydet', submitClass = 'btn-primary' }) {
         const typeInfo = TX_TYPES[type] || {};
 
@@ -2406,19 +2430,29 @@ const App = (() => {
         if (allowTypeSelect || ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'].includes(type)) {
             typeFieldHtml = `
                 <div class="form-group">
-                    <label class="form-label" for="input-tx-type">İşlem Tipi</label>
-                    <select class="form-select" id="input-tx-type">
-                        <option value="malzeme" ${type === 'malzeme' ? 'selected' : ''}>🧱 Malzeme Ödemesi</option>
-                        <option value="iscilik" ${type === 'iscilik' ? 'selected' : ''}>👷 İşçilik Gideri (Usta)</option>
-                        <option value="iscilik-malzeme" ${type === 'iscilik-malzeme' ? 'selected' : ''}>🛠️ İşçilik + Malzeme (Taşeron)</option>
-                        <option value="ofis-sabit" ${type === 'ofis-sabit' ? 'selected' : ''}>🏢 Ofis Sabit Gideri</option>
-                    </select>
+                    <label class="form-label">İşlem Tipi Seçin</label>
+                    <div id="tx-type-selector-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                        <button type="button" class="btn-tx-type ${type === 'malzeme' ? 'active' : ''}" data-type="malzeme" onclick="App.switchTxType('malzeme')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${type === 'malzeme' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${type === 'malzeme' ? 'var(--accent)' : 'var(--glass-border)'}; color:${type === 'malzeme' ? '#ffffff' : 'var(--text-muted)'};">
+                            <span>🧱</span> <span>Malzeme Ödemesi</span>
+                        </button>
+                        <button type="button" class="btn-tx-type ${type === 'iscilik' ? 'active' : ''}" data-type="iscilik" onclick="App.switchTxType('iscilik')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${type === 'iscilik' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${type === 'iscilik' ? 'var(--accent)' : 'var(--glass-border)'}; color:${type === 'iscilik' ? '#ffffff' : 'var(--text-muted)'};">
+                            <span>👷</span> <span>İşçilik Gideri (Usta)</span>
+                        </button>
+                        <button type="button" class="btn-tx-type ${type === 'iscilik-malzeme' ? 'active' : ''}" data-type="iscilik-malzeme" onclick="App.switchTxType('iscilik-malzeme')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${type === 'iscilik-malzeme' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${type === 'iscilik-malzeme' ? 'var(--accent)' : 'var(--glass-border)'}; color:${type === 'iscilik-malzeme' ? '#ffffff' : 'var(--text-muted)'};">
+                            <span>🛠️</span> <span>İşçilik + Malzeme (Taşeron)</span>
+                        </button>
+                        <button type="button" class="btn-tx-type ${type === 'ofis-sabit' ? 'active' : ''}" data-type="ofis-sabit" onclick="App.switchTxType('ofis-sabit')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${type === 'ofis-sabit' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${type === 'ofis-sabit' ? 'var(--accent)' : 'var(--glass-border)'}; color:${type === 'ofis-sabit' ? '#ffffff' : 'var(--text-muted)'};">
+                            <span>🏢</span> <span>Ofis Sabit Gideri</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="input-tx-type" value="${type}">
                 </div>`;
         } else {
             typeFieldHtml = `
                 <div class="form-group">
                     <label class="form-label">İşlem Tipi</label>
                     <input class="form-input" type="text" value="${typeInfo.label}" disabled>
+                    <input type="hidden" id="input-tx-type" value="${type}">
                 </div>`;
         }
 
@@ -3864,6 +3898,7 @@ const App = (() => {
         onPayAmountInput,
         onPayModeChange,
         onTxPeriodSelectChange,
+        switchTxType,
         handleOverlayClick,
         openHakedis,
         openGider,
