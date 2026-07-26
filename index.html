@@ -250,17 +250,30 @@
                     <span class="quick-label">Ofis Gideri Yansıt</span>
                     <span class="quick-desc">Sabit gider payı düş</span>
                 </button>
-                <button class="btn-quick" onclick="App.openBorcTransfer()" style="background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15)); border-color: rgba(99,102,241,0.3);">
-                    <span class="quick-icon">🔄</span>
-                    <span class="quick-label">Projeler Arası Borç</span>
-                    <span class="quick-desc">Borç ver / al / geri öde</span>
-                </button>
-                <button class="btn-quick btn-quick-excel" onclick="document.getElementById('csv-import-input').click()">
-                    <span class="quick-icon">📊</span>
-                    <span class="quick-label">Maliyet Tablosu Yükle</span>
-                    <span class="quick-desc">Excel/CSV'den toplu gider aktar</span>
-                </button>
-                <input type="file" id="csv-import-input" accept=".csv,.tsv,.txt,.xls,.xlsx" style="display:none" onchange="App.handleCsvImport(event)">
+            </div>
+
+            <!-- Secondary Actions (less used) -->
+            <div class="secondary-actions collapsed" style="margin-top:8px;">
+                <div onclick="this.parentElement.classList.toggle('collapsed')" style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; padding:6px 12px; font-size:0.75rem; color:var(--text-muted); font-weight:600;">
+                    <svg class="collapse-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    Diğer İşlemler
+                </div>
+                <div class="collapsible-body" style="overflow:hidden; transition: max-height 0.35s ease, opacity 0.25s ease;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; padding:4px 0;">
+                        <button class="btn-quick" onclick="App.openBorcTransfer()" style="background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1)); border-color: rgba(99,102,241,0.2);">
+                            <span class="quick-icon">🔄</span>
+                            <span class="quick-label">Projeler Arası Borç</span>
+                            <span class="quick-desc">Borç ver / al / geri öde</span>
+                        </button>
+                        <button class="btn-quick btn-quick-excel" onclick="document.getElementById('csv-import-input').click()">
+                            <span class="quick-icon">📊</span>
+                            <span class="quick-label">Maliyet Tablosu Yükle</span>
+                            <span class="quick-desc">Excel/CSV'den toplu gider aktar</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <input type="file" id="csv-import-input" accept=".csv,.tsv,.txt,.xls,.xlsx" style="display:none" onchange="App.handleCsvImport(event)">
             </div>
 
             <!-- Transactions List -->

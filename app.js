@@ -423,20 +423,34 @@ const App = (() => {
     // COMPUTED FIELDS (Formulas)
     // ─────────────────────────────────────
 
-    /** Sum of paid income for a project (hakedis + borc-al paid) */
+    /** Sum of realized income for a project.
+     *  - hakedis: only when paid (odendi)
+     *  - borc-al: ALWAYS (money was received immediately, bekliyor = not yet repaid)
+     */
     function getProjectIncome(projectId) {
-        const incomeTypes = ['hakedis', 'borc-al'];
         return data.transactions
-            .filter(t => t.projectId === projectId && incomeTypes.includes(t.type) && t.paymentStatus === 'odendi')
-            .reduce((sum, t) => sum + t.amount, 0);
+            .filter(t => t.projectId === projectId)
+            .reduce((sum, t) => {
+                if (t.type === 'hakedis' && t.paymentStatus === 'odendi') return sum + t.amount;
+                if (t.type === 'borc-al') return sum + t.amount; // Loan received = immediate income
+                return sum;
+            }, 0);
     }
 
-    /** Sum of paid expenses for a project (malzeme + iscilik + ofis-sabit + borc-ver) — includes partial payments */
+    /** Sum of realized expenses for a project.
+     *  - malzeme/iscilik/ofis-sabit: actual paid amounts (partial payments supported)
+     *  - borc-ver: actual paid amounts
+     *  - borc-al repayments: payments[] on borc-al count as expenses (money leaving)
+     */
     function getProjectExpense(projectId) {
         const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit', 'borc-ver'];
         return data.transactions
-            .filter(t => t.projectId === projectId && expenseTypes.includes(t.type))
-            .reduce((sum, t) => sum + getTxPaidAmount(t), 0);
+            .filter(t => t.projectId === projectId)
+            .reduce((sum, t) => {
+                if (expenseTypes.includes(t.type)) return sum + getTxPaidAmount(t);
+                if (t.type === 'borc-al') return sum + getTxPaidAmount(t); // Repayments = expense
+                return sum;
+            }, 0);
     }
 
     /** Current cash balance for a project */
@@ -456,7 +470,7 @@ const App = (() => {
         const limit = new Date(today);
         limit.setDate(limit.getDate() + RISK_DAYS);
 
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit'];
+        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit', 'borc-al'];
         return data.transactions
             .filter(t => {
                 if (t.projectId !== projectId) return false;
