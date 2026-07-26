@@ -534,7 +534,7 @@ const App = (() => {
             dueDate: dueDate || '',
             description: (description || '').trim(),
             vendor: (vendor || '').trim(),
-            period: parseInt(period) || 0,
+            period: (typeof period === 'string' && period.startsWith('ilave-')) ? period : (parseInt(period) || 0),
             scopeType: finalScopeType,
             createdBy: currentUser,
             createdAt: new Date().toISOString(),
@@ -2351,8 +2351,13 @@ const App = (() => {
     // MODALS — Transactions (Quick Actions)
     // ─────────────────────────────────────
 
-    function openHakedis() {
-        if (!currentProjectId) return;
+    function openHakedis(projectId = null) {
+        const targetProjectId = projectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
+        if (!targetProjectId) {
+            showToast('Lütfen önce bir proje oluşturun.', 'warning');
+            return;
+        }
+        currentProjectId = targetProjectId;
         openModal('💰 Müşteri Ödemesi Tahsil Et', getTransactionFormHtml({
             type: 'hakedis',
             statusLocked: 'odendi',
@@ -2362,8 +2367,13 @@ const App = (() => {
         }));
     }
 
-    function openGider(defaultType = 'malzeme') {
-        if (!currentProjectId) return;
+    function openGider(defaultType = 'malzeme', projectId = null) {
+        const targetProjectId = projectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
+        if (!targetProjectId) {
+            showToast('Lütfen önce bir proje oluşturun.', 'warning');
+            return;
+        }
+        currentProjectId = targetProjectId;
         openModal('📦 Proje Maliyet / Ödeme Ekle', getTransactionFormHtml({
             type: defaultType,
             allowTypeSelect: true,
@@ -2379,8 +2389,13 @@ const App = (() => {
     function openIscilik() { openGider('iscilik'); }
     function openTaseron() { openGider('iscilik-malzeme'); }
 
-    function openIlaveIsModal() {
-        if (!currentProjectId) return;
+    function openIlaveIsModal(projectId = null) {
+        const targetProjectId = projectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
+        if (!targetProjectId) {
+            showToast('Lütfen önce bir proje oluşturun.', 'warning');
+            return;
+        }
+        currentProjectId = targetProjectId;
         const project = getProject(currentProjectId);
         if (!project) return;
 
@@ -2659,18 +2674,33 @@ const App = (() => {
     }
 
     function onTxPeriodSelectChange(selectEl) {
-        const periodNum = parseInt(selectEl?.value, 10) || 0;
-        if (periodNum > 0 && currentProjectId) {
-            const project = getProject(currentProjectId);
-            if (project && project.periods) {
-                const pObj = project.periods.find(p => p.number === periodNum);
-                if (pObj && pObj.amount > 0) {
-                    const collected = data.transactions
-                        .filter(t => t.projectId === currentProjectId && t.type === 'hakedis' && t.period === periodNum && t.paymentStatus === 'odendi')
-                        .reduce((s, t) => s + t.amount, 0);
-                    const remaining = Math.max(0, pObj.amount - collected);
-                    const amtInput = document.getElementById('input-tx-amount');
-                    if (amtInput) {
+        const val = selectEl?.value;
+        if (!val || !currentProjectId) return;
+
+        const amtInput = document.getElementById('input-tx-amount');
+        if (!amtInput) return;
+
+        if (typeof val === 'string' && val.startsWith('ilave-')) {
+            const txId = val.replace('ilave-', '');
+            const ilaveTx = data.transactions.find(t => t.id === txId);
+            if (ilaveTx && ilaveTx.clientAddonAmount > 0) {
+                const collected = data.transactions
+                    .filter(t => t.projectId === currentProjectId && t.type === 'hakedis' && t.period === val && t.paymentStatus === 'odendi')
+                    .reduce((s, t) => s + t.amount, 0);
+                const remaining = Math.max(0, ilaveTx.clientAddonAmount - collected);
+                amtInput.value = (remaining > 0 ? remaining : ilaveTx.clientAddonAmount).toLocaleString('tr-TR');
+            }
+        } else {
+            const periodNum = parseInt(val, 10) || 0;
+            if (periodNum > 0) {
+                const project = getProject(currentProjectId);
+                if (project && project.periods) {
+                    const pObj = project.periods.find(p => p.number === periodNum);
+                    if (pObj && pObj.amount > 0) {
+                        const collected = data.transactions
+                            .filter(t => t.projectId === currentProjectId && t.type === 'hakedis' && t.period === periodNum && t.paymentStatus === 'odendi')
+                            .reduce((s, t) => s + t.amount, 0);
+                        const remaining = Math.max(0, pObj.amount - collected);
                         amtInput.value = (remaining > 0 ? remaining : pObj.amount).toLocaleString('tr-TR');
                     }
                 }
@@ -2946,7 +2976,11 @@ const App = (() => {
         const dueDate = dueDateEl ? dueDateEl.value : '';
 
         const periodEl = document.getElementById('input-tx-period');
-        const period = periodEl ? parseInt(periodEl.value) || 0 : 0;
+        let period = 0;
+        if (periodEl) {
+            const pVal = periodEl.value;
+            period = (typeof pVal === 'string' && pVal.startsWith('ilave-')) ? pVal : (parseInt(pVal, 10) || 0);
+        }
 
         const scopeEl = document.getElementById('input-tx-scope-type');
         const scopeType = scopeEl ? scopeEl.value : undefined;
@@ -4275,7 +4309,12 @@ const App = (() => {
         tx.paymentStatus = document.getElementById('input-tx-status').value;
 
         const periodEl = document.getElementById('input-tx-period');
-        tx.period = periodEl ? parseInt(periodEl.value) || 0 : 0;
+        if (periodEl) {
+            const pVal = periodEl.value;
+            tx.period = (typeof pVal === 'string' && pVal.startsWith('ilave-')) ? pVal : (parseInt(pVal, 10) || 0);
+        } else {
+            tx.period = 0;
+        }
 
         if (estimatedEl) {
             if (estimatedAmount > 0) {
