@@ -13,8 +13,8 @@ const App = (() => {
     const RISK_DAYS = 30;
 
     const TX_TYPES = {
-        hakedis:    { label: 'Hakediş / Gelir',    icon: '💰', direction: 'income',  cssClass: 'income' },
-        malzeme:    { label: 'Malzeme Gideri',      icon: '🧱', direction: 'expense', cssClass: 'expense' },
+        hakedis:    { label: 'Ara Ödeme (Hakediş)', icon: '💰', direction: 'income',  cssClass: 'income' },
+        malzeme:    { label: 'Malzeme Ödemesi',     icon: '🧱', direction: 'expense', cssClass: 'expense' },
         iscilik:    { label: 'İşçilik Gideri',      icon: '👷', direction: 'expense', cssClass: 'expense' },
         'ofis-sabit': { label: 'Ofis Sabit Gideri', icon: '🏢', direction: 'expense', cssClass: 'ofis' },
         'borc-ver': { label: 'Proje Borç Verme',   icon: '↗️', direction: 'expense', cssClass: 'loan-out' },
@@ -459,6 +459,22 @@ const App = (() => {
     }
 
     /**
+     * Resolves the effective due date for a transaction.
+     * Uses explicit tx.dueDate, or if empty and assigned to a period, resolves period.date.
+     */
+    function getTxDueDate(tx) {
+        if (tx.dueDate) return tx.dueDate;
+        if (tx.period && tx.period > 0) {
+            const project = getProject(tx.projectId);
+            if (project && project.periods && Array.isArray(project.periods)) {
+                const pObj = project.periods.find(p => p.number === tx.period);
+                if (pObj && pObj.date) return pObj.date;
+            }
+        }
+        return '';
+    }
+
+    /**
      * Sum of pending expenses that threaten cash flow for a project.
      * Includes:
      *   - Overdue: vadesi geçmiş (dueDate < bugün) ve hala "bekliyor" olan borçlar
@@ -476,8 +492,9 @@ const App = (() => {
                 if (t.projectId !== projectId) return false;
                 if (!expenseTypes.includes(t.type)) return false;
                 if (t.paymentStatus !== 'bekliyor') return false;
-                if (!t.dueDate) return false; // Vadesi belirlenmemiş işlemler risk dışı
-                const due = new Date(t.dueDate);
+                const dueDateStr = getTxDueDate(t);
+                if (!dueDateStr) return false;
+                const due = new Date(dueDateStr);
                 due.setHours(0, 0, 0, 0);
                 return due <= limit;
             })
@@ -566,12 +583,13 @@ const App = (() => {
                 if (!expenseTypes.includes(t.type)) return false;
                 if (t.paymentStatus !== 'bekliyor') return false;
                 if (getTxRemainingAmount(t) <= 0) return false; // Fully paid but status not updated
-                if (!t.dueDate) return false; // Vadesi belirlenmemiş = henüz nakit akış endişesi değil
-                const due = new Date(t.dueDate);
+                const dueDateStr = getTxDueDate(t);
+                if (!dueDateStr) return false;
+                const due = new Date(dueDateStr);
                 due.setHours(0, 0, 0, 0);
                 return due <= limit;
             })
-            .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+            .sort((a, b) => new Date(getTxDueDate(a)) - new Date(getTxDueDate(b)));
     }
 
     // ─────────────────────────────────────
@@ -718,8 +736,12 @@ const App = (() => {
         const totalRisk = getTotal30DayRisk();
         const riskCard = document.getElementById('dashboard-risk-card');
         const riskAmount = document.getElementById('dashboard-risk-total');
+        const riskLabel = riskCard ? riskCard.querySelector('.risk-label') : null;
         riskAmount.textContent = formatCurrency(totalRisk);
         riskCard.className = 'risk-card ' + (totalRisk >= 0 ? 'risk-positive' : 'risk-negative pulse-danger');
+        if (riskLabel) {
+            riskLabel.textContent = totalRisk >= 0 ? '30 Günlük Tahmini Bakiye — Tüm Projeler' : '30 Günlük Riskli Bakiye — Tüm Projeler';
+        }
 
         // Stats
         document.getElementById('stat-total-income').textContent = formatCurrency(getTotalIncome());
@@ -879,8 +901,12 @@ const App = (() => {
         // Risk card
         const riskCard = document.getElementById('detail-risk-card');
         const riskAmount = document.getElementById('detail-risk');
+        const riskLabel = riskCard ? riskCard.querySelector('.risk-label') : null;
         riskAmount.textContent = formatCurrency(risk);
         riskCard.className = 'risk-card compact ' + (risk >= 0 ? 'risk-positive' : 'risk-negative pulse-danger');
+        if (riskLabel) {
+            riskLabel.textContent = risk >= 0 ? '30 Günlük Tahmini Bakiye' : '30 Günlük Riskli Bakiye';
+        }
 
         // Profitability & Remaining Agreed Balance analysis
         renderProfitability(projectId);
@@ -1934,7 +1960,7 @@ const App = (() => {
 
     function openHakedis() {
         if (!currentProjectId) return;
-        openModal('💰 Hakediş Tahsil Et', getTransactionFormHtml({
+        openModal('💰 Ara Ödeme (Hakediş) Tahsil Et', getTransactionFormHtml({
             type: 'hakedis',
             statusLocked: 'odendi',
             showDueDate: false,
@@ -1945,12 +1971,12 @@ const App = (() => {
 
     function openMalzeme() {
         if (!currentProjectId) return;
-        openModal('🧱 Malzeme Faturası Ekle', getTransactionFormHtml({
+        openModal('🧱 Malzeme Ödemesi Ekle', getTransactionFormHtml({
             type: 'malzeme',
             statusLocked: 'bekliyor',
             showDueDate: true,
             showEstimate: true,
-            submitLabel: 'Fatura Ekle',
+            submitLabel: 'Gider Ekle',
             submitClass: 'btn-warning'
         }));
     }
@@ -3380,11 +3406,26 @@ const App = (() => {
             `;
         }
 
+        // Type options
+        const isLoan = ['borc-ver', 'borc-al'].includes(tx.type);
+        let typeSelectHtml = '';
+        if (isLoan) {
+            typeSelectHtml = `<input class="form-input" type="text" value="${typeInfo.label}" disabled>`;
+        } else {
+            typeSelectHtml = `
+                <select class="form-select" id="input-tx-type">
+                    <option value="malzeme" ${tx.type === 'malzeme' ? 'selected' : ''}>🧱 Malzeme Ödemesi</option>
+                    <option value="iscilik" ${tx.type === 'iscilik' ? 'selected' : ''}>👷 İşçilik Gideri</option>
+                    <option value="hakedis" ${tx.type === 'hakedis' ? 'selected' : ''}>💰 Ara Ödeme (Hakediş)</option>
+                    <option value="ofis-sabit" ${tx.type === 'ofis-sabit' ? 'selected' : ''}>🏢 Ofis Sabit Gideri</option>
+                </select>`;
+        }
+
         const html = `
             <form onsubmit="App.updateTransaction(event, '${txId}')">
                 <div class="form-group">
-                    <label class="form-label">İşlem Tipi</label>
-                    <input class="form-input" type="text" value="${typeInfo.label}" disabled>
+                    <label class="form-label" for="input-tx-type">İşlem Tipi</label>
+                    ${typeSelectHtml}
                 </div>
                 ${periodSelectHtml}
                 ${showEstimateField ? `
@@ -3426,6 +3467,11 @@ const App = (() => {
         e.preventDefault();
         const tx = data.transactions.find(t => t.id === txId);
         if (!tx) return;
+
+        const typeEl = document.getElementById('input-tx-type');
+        if (typeEl && typeEl.value) {
+            tx.type = typeEl.value;
+        }
 
         const amount = parseAmountInput(document.getElementById('input-tx-amount'));
         const estimatedEl = document.getElementById('input-tx-estimated');
