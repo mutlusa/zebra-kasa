@@ -1220,6 +1220,14 @@ body::before {
     background: rgba(124, 92, 252, 0.12);
 }
 
+.tx-icon.loan-out {
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.tx-icon.loan-in {
+    background: rgba(99, 102, 241, 0.12);
+}
+
 .tx-info {
     flex: 1;
     min-width: 0;

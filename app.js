@@ -16,7 +16,9 @@ const App = (() => {
         hakedis:    { label: 'Hakediş / Gelir',    icon: '💰', direction: 'income',  cssClass: 'income' },
         malzeme:    { label: 'Malzeme Gideri',      icon: '🧱', direction: 'expense', cssClass: 'expense' },
         iscilik:    { label: 'İşçilik Gideri',      icon: '👷', direction: 'expense', cssClass: 'expense' },
-        'ofis-sabit': { label: 'Ofis Sabit Gideri', icon: '🏢', direction: 'expense', cssClass: 'ofis' }
+        'ofis-sabit': { label: 'Ofis Sabit Gideri', icon: '🏢', direction: 'expense', cssClass: 'ofis' },
+        'borc-ver': { label: 'Proje Borç Verme',   icon: '↗️', direction: 'expense', cssClass: 'loan-out' },
+        'borc-al':  { label: 'Proje Borç Alma',    icon: '↙️', direction: 'income',  cssClass: 'loan-in' }
     };
 
     const STATUS_LABELS = {
@@ -421,16 +423,17 @@ const App = (() => {
     // COMPUTED FIELDS (Formulas)
     // ─────────────────────────────────────
 
-    /** Sum of paid hakedis income for a project */
+    /** Sum of paid income for a project (hakedis + borc-al paid) */
     function getProjectIncome(projectId) {
+        const incomeTypes = ['hakedis', 'borc-al'];
         return data.transactions
-            .filter(t => t.projectId === projectId && t.type === 'hakedis' && t.paymentStatus === 'odendi')
+            .filter(t => t.projectId === projectId && incomeTypes.includes(t.type) && t.paymentStatus === 'odendi')
             .reduce((sum, t) => sum + t.amount, 0);
     }
 
-    /** Sum of paid expenses for a project (malzeme + iscilik + ofis-sabit) — includes partial payments */
+    /** Sum of paid expenses for a project (malzeme + iscilik + ofis-sabit + borc-ver) — includes partial payments */
     function getProjectExpense(projectId) {
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit'];
+        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit', 'borc-ver'];
         return data.transactions
             .filter(t => t.projectId === projectId && expenseTypes.includes(t.type))
             .reduce((sum, t) => sum + getTxPaidAmount(t), 0);
@@ -543,7 +546,7 @@ const App = (() => {
         const limit = new Date(today);
         limit.setDate(limit.getDate() + RISK_DAYS);
 
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit'];
+        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit', 'borc-al'];
         return data.transactions
             .filter(t => {
                 if (!expenseTypes.includes(t.type)) return false;
@@ -1248,6 +1251,18 @@ const App = (() => {
         const periodLabelText = periodBadge ? ` · ${periodBadge}` : '';
         const createdByLine = tx.createdBy ? `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">👤 ${escapeHtml(tx.createdBy)}</div>` : '';
 
+        // Linked project info for loan transactions
+        let linkedProjectLine = '';
+        if (tx.linkedProjectId && (tx.type === 'borc-ver' || tx.type === 'borc-al')) {
+            const linkedProject = getProject(tx.linkedProjectId);
+            const linkedName = linkedProject ? escapeHtml(linkedProject.name) : 'Silinmiş Proje';
+            const arrow = tx.type === 'borc-ver' ? '→' : '←';
+            const color = tx.type === 'borc-ver' ? 'var(--danger)' : 'var(--success)';
+            linkedProjectLine = `<div style="font-size:0.72rem; margin-top:3px; padding:3px 8px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:4px; display:inline-block;">
+                <span style="color:${color}; font-weight:700;">🔄 ${arrow} ${linkedName}</span>
+            </div>`;
+        }
+
         // Partial payment progress bar
         let partialPaymentLine = '';
         if (isPartiallyPaid) {
@@ -1279,6 +1294,7 @@ const App = (() => {
                     <div class="tx-date">${dateLabelText} · ${typeInfo.label}${periodLabelText}</div>
                     ${estimateLine}
                     ${createdByLine}
+                    ${linkedProjectLine}
                     ${partialPaymentLine}
                 </div>
                 <span class="tx-amount ${amountClass}">${amountSign}${formatCurrency(tx.amount)}</span>
@@ -1858,9 +1874,38 @@ const App = (() => {
         const project = getProject(currentProjectId);
         if (!project) return;
 
+        const html = `
+            <div style="margin-bottom: 16px; line-height: 1.5; color: var(--text-secondary);">
+                <strong>"${escapeHtml(project.name)}"</strong> projesi ve tüm işlem geçmişi kalıcı olarak silinecek.
+                <br>Devam etmek için güvenlik şifrenizi girin.
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label" for="input-delete-password">Güvenlik Şifresi</label>
+                <input class="form-input" type="password" id="input-delete-password" placeholder="Şifrenizi girin" autofocus required>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" onclick="App.closeModal()">İptal</button>
+                <button type="button" class="btn btn-danger" onclick="App.processDeleteProject()">🗑️ Projeyi Sil</button>
+            </div>
+        `;
+        openModal('🗑️ Proje Silme — Şifre Doğrulama', html);
+    }
+
+    function processDeleteProject() {
+        if (!currentProjectId) return;
+        const inputPass = document.getElementById('input-delete-password').value;
+        const actualPass = data.resetPassword || '1234';
+
+        if (inputPass !== actualPass) {
+            showToast('Hatalı güvenlik şifresi! İşlem iptal edildi.', 'error');
+            return;
+        }
+
+        closeModal();
+        const project = getProject(currentProjectId);
         showConfirm(
             'Projeyi Sil',
-            `"${project.name}" projesi ve tüm işlem geçmişi kalıcı olarak silinecek. Emin misiniz?`,
+            `Şifre doğrulandı. "${project ? project.name : ''}" projesi kalıcı olarak silinecek. Son kez onaylıyor musunuz?`,
             () => {
                 removeProject(currentProjectId);
                 showToast('Proje silindi.', 'warning');
@@ -1917,6 +1962,162 @@ const App = (() => {
             submitLabel: 'Gider Yansıt',
             submitClass: 'btn-primary'
         }));
+    }
+
+    // ─────────────────────────────────────
+    // PROJELER ARASI BORÇ SİSTEMİ
+    // ─────────────────────────────────────
+    function openBorcTransfer() {
+        if (!currentProjectId) return;
+        const currentProject = getProject(currentProjectId);
+        if (!currentProject) return;
+
+        // Get other projects for the dropdown
+        const otherProjects = data.projects.filter(p => p.id !== currentProjectId);
+        if (otherProjects.length === 0) {
+            showToast('Borç transferi için en az 2 proje gerekli.', 'error');
+            return;
+        }
+
+        const projectOptions = otherProjects.map(p =>
+            `<option value="${p.id}">${escapeHtml(p.name)} (Kasa: ${formatCurrency(getProjectBalance(p.id))})</option>`
+        ).join('');
+
+        const html = `
+            <form onsubmit="App.saveBorcTransfer(event)">
+                <div style="margin-bottom:14px; padding:12px; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.15); border-radius:8px; font-size:0.82rem; line-height:1.5; color:var(--text-secondary);">
+                    🔄 Projeler arası borç transferi oluşturun. Borç veren projeden gider, alan projeye gelir kaydı çift kayıt olarak otomatik oluşturulur.
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bu Proje (Kaynak)</label>
+                    <input class="form-input" type="text" value="${escapeHtml(currentProject.name)}" disabled>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="input-borc-direction">İşlem Yönü</label>
+                    <select class="form-select" id="input-borc-direction">
+                        <option value="ver">↗️ Bu projeden → Seçilen projeye BORÇ VER</option>
+                        <option value="al">↙️ Seçilen projeden → Bu projeye BORÇ AL</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="input-borc-target">Karşı Proje</label>
+                    <select class="form-select" id="input-borc-target">
+                        ${projectOptions}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="input-borc-amount">Borç Tutarı (₺)</label>
+                    <input class="form-input" type="text" inputmode="numeric" id="input-borc-amount" placeholder="0" required autofocus oninput="App.formatAmountInput(this)">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="input-borc-due-date">Geri Ödeme Tarihi <span style="font-weight:400; color:var(--text-muted);">— opsiyonel</span></label>
+                    <input class="form-input" type="date" id="input-borc-due-date" value="">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="input-borc-description">Açıklama</label>
+                    <input class="form-input" type="text" id="input-borc-description" placeholder="Örn: Malzeme alımı için borç">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline" onclick="App.closeModal()">İptal</button>
+                    <button type="submit" class="btn btn-primary">🔄 Borç Transferi Oluştur</button>
+                </div>
+            </form>
+        `;
+        openModal('🔄 Projeler Arası Borç Transferi', html);
+    }
+
+    function saveBorcTransfer(e) {
+        e.preventDefault();
+        if (!currentProjectId) return;
+
+        const direction = document.getElementById('input-borc-direction').value;
+        const targetProjectId = document.getElementById('input-borc-target').value;
+        const amount = parseAmountInput(document.getElementById('input-borc-amount'));
+        const dueDate = document.getElementById('input-borc-due-date').value;
+        const description = document.getElementById('input-borc-description').value.trim();
+
+        if (amount <= 0) {
+            showToast('Borç tutarı 0\'dan büyük olmalıdır.', 'error');
+            return;
+        }
+
+        const currentProject = getProject(currentProjectId);
+        const targetProject = getProject(targetProjectId);
+        if (!currentProject || !targetProject) {
+            showToast('Proje bulunamadı!', 'error');
+            return;
+        }
+
+        const currentUser = getUserName();
+
+        // Determine who lends and who borrows
+        let lenderProjectId, borrowerProjectId, lenderName, borrowerName;
+        if (direction === 'ver') {
+            lenderProjectId = currentProjectId;
+            borrowerProjectId = targetProjectId;
+            lenderName = currentProject.name;
+            borrowerName = targetProject.name;
+        } else {
+            lenderProjectId = targetProjectId;
+            borrowerProjectId = currentProjectId;
+            lenderName = targetProject.name;
+            borrowerName = currentProject.name;
+        }
+
+        const descText = description || 'Projeler arası borç transferi';
+
+        // Create LENDER transaction (borc-ver → expense, immediately paid)
+        const lenderTx = {
+            id: generateId(),
+            type: 'borc-ver',
+            projectId: lenderProjectId,
+            amount: amount,
+            paidAmount: amount,
+            paymentStatus: 'odendi',
+            dueDate: dueDate || '',
+            description: `${descText} → ${borrowerName}`,
+            period: 0,
+            createdBy: currentUser,
+            createdAt: new Date().toISOString(),
+            linkedProjectId: borrowerProjectId,
+            payments: [{ id: generateId(), amount: amount, date: todayStr(), createdBy: currentUser }]
+        };
+
+        // Create BORROWER transaction (borc-al → income, pending repayment)
+        const borrowerTx = {
+            id: generateId(),
+            type: 'borc-al',
+            projectId: borrowerProjectId,
+            amount: amount,
+            paidAmount: 0,
+            paymentStatus: 'bekliyor',
+            dueDate: dueDate || '',
+            description: `${descText} ← ${lenderName}`,
+            period: 0,
+            createdBy: currentUser,
+            createdAt: new Date().toISOString(),
+            linkedProjectId: lenderProjectId,
+            linkedTxId: lenderTx.id,
+            payments: []
+        };
+
+        // Cross-link
+        lenderTx.linkedTxId = borrowerTx.id;
+
+        data.transactions.push(lenderTx);
+        data.transactions.push(borrowerTx);
+        saveData();
+
+        closeModal();
+        showToast(`🔄 ${formatCurrency(amount)} borç transferi oluşturuldu: ${lenderName} → ${borrowerName}`, 'success');
+        renderProjectDetail(currentProjectId);
     }
 
     function getTransactionFormHtml(opts) {
@@ -2219,6 +2420,30 @@ const App = (() => {
                 `Kısmi ödeme alındı! Ödenen: ${formatCurrency(payAmount)} · Kalan: ${formatCurrency(newRemaining)} (Vade: ${dateText}) · 👤 ${currentUser}`,
                 'warning'
             );
+        }
+
+        // ── LINKED LOAN REPAYMENT: Update the linked transaction ──
+        if (tx.linkedTxId && (tx.type === 'borc-al' || tx.type === 'borc-ver')) {
+            const linkedTx = data.transactions.find(t => t.id === tx.linkedTxId);
+            if (linkedTx) {
+                // When borc-al is repaid, the lender (borc-ver) should see their money coming back
+                // We add a payment record to the linked tx to track the repayment
+                if (!Array.isArray(linkedTx.payments)) linkedTx.payments = [];
+                linkedTx.payments.push({
+                    id: generateId(),
+                    amount: payAmount,
+                    date: todayStr(),
+                    createdBy: currentUser,
+                    note: `Geri ödeme (${getProject(tx.projectId)?.name || ''})`
+                });
+                // Sync paidAmount and status
+                linkedTx.paidAmount = (parseFloat(linkedTx.paidAmount) || 0);
+                if (tx.paymentStatus === 'odendi') {
+                    // Fully repaid — both sides should show completion
+                    linkedTx.description = linkedTx.description.replace(/\s*\(Geri Ödenmedi\)/g, '');
+                }
+                saveData();
+            }
         }
 
         closeModal();
@@ -3279,6 +3504,7 @@ const App = (() => {
         onPeriodCountInput,
         onPeriodAmountInput,
         deleteProject,
+        processDeleteProject,
         generatePeriodFields,
         validatePeriodSum,
         distributePeriodsEvenly,
@@ -3294,6 +3520,8 @@ const App = (() => {
         openMalzeme,
         openIscilik,
         openOfisSabit,
+        openBorcTransfer,
+        saveBorcTransfer,
         saveTransaction,
         markAsPaid,
         openPaymentHistory,
