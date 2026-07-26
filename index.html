@@ -120,15 +120,34 @@
                 </div>
             </div>
 
-            <!-- Projects -->
+            <!-- Quick Actions -->
             <div class="section-header">
                 <h3>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                    Projeler
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    Hızlı İşlemler
                 </h3>
             </div>
-            <div id="projects-grid" class="projects-grid">
-                <!-- JS tarafından render edilir -->
+            <div class="quick-actions-grid">
+                <button class="btn-quick btn-quick-income" onclick="App.openHakedis()">
+                    <span class="quick-icon">💰</span>
+                    <span class="quick-label">Müşteri Ödemesi Tahsil Et</span>
+                    <span class="quick-desc">Peşinat veya tahsilat ekle</span>
+                </button>
+                <button class="btn-quick btn-quick-malzeme" onclick="App.openGider()">
+                    <span class="quick-icon">📦</span>
+                    <span class="quick-label">Proje Maliyet / Ödeme</span>
+                    <span class="quick-desc">Malzeme, İşçilik veya Taşeron</span>
+                </button>
+                <button class="btn-quick" onclick="App.openIlaveIsModal()" style="background:linear-gradient(135deg, rgba(245,158,11,0.12), rgba(239,68,68,0.08)); border:1.5px solid rgba(245,158,11,0.3);">
+                    <span class="quick-icon">✨</span>
+                    <span class="quick-label">Müşteri İlave İşi</span>
+                    <span class="quick-desc">Ek Sözleşme / Ek Hakediş</span>
+                </button>
+                <button class="btn-quick btn-quick-ofis" onclick="App.openOfisSabit()">
+                    <span class="quick-icon">🏢</span>
+                    <span class="quick-label">Ofis Gideri Yansıt</span>
+                    <span class="quick-desc">Sabit gider payı düş</span>
+                </button>
             </div>
 
             <!-- Upcoming Payments -->

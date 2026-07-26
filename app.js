@@ -2352,37 +2352,50 @@ const App = (() => {
     // ─────────────────────────────────────
 
     function openHakedis(projectId = null) {
-        const targetProjectId = projectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
-        if (!targetProjectId) {
-            showToast('Lütfen önce bir proje oluşturun.', 'warning');
-            return;
+        try {
+            const validProjectId = (typeof projectId === 'string' && projectId.trim()) ? projectId : null;
+            const targetProjectId = validProjectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
+            if (!targetProjectId) {
+                showToast('Lütfen önce bir proje oluşturun.', 'warning');
+                return;
+            }
+            currentProjectId = targetProjectId;
+            openModal('💰 Müşteri Ödemesi Tahsil Et', getTransactionFormHtml({
+                type: 'hakedis',
+                statusLocked: 'odendi',
+                showDueDate: false,
+                submitLabel: 'Tahsil Et',
+                submitClass: 'btn-success'
+            }));
+        } catch (err) {
+            console.error('openHakedis error:', err);
+            showToast('Ödeme ekranı açılırken bir sorun oluştu.', 'error');
         }
-        currentProjectId = targetProjectId;
-        openModal('💰 Müşteri Ödemesi Tahsil Et', getTransactionFormHtml({
-            type: 'hakedis',
-            statusLocked: 'odendi',
-            showDueDate: false,
-            submitLabel: 'Tahsil Et',
-            submitClass: 'btn-success'
-        }));
     }
 
     function openGider(defaultType = 'malzeme', projectId = null) {
-        const targetProjectId = projectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
-        if (!targetProjectId) {
-            showToast('Lütfen önce bir proje oluşturun.', 'warning');
-            return;
+        try {
+            const validDefaultType = (typeof defaultType === 'string' && defaultType.trim()) ? defaultType : 'malzeme';
+            const validProjectId = (typeof projectId === 'string' && projectId.trim()) ? projectId : null;
+            const targetProjectId = validProjectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
+            if (!targetProjectId) {
+                showToast('Lütfen önce bir proje oluşturun.', 'warning');
+                return;
+            }
+            currentProjectId = targetProjectId;
+            openModal('📦 Proje Maliyet / Ödeme Ekle', getTransactionFormHtml({
+                type: validDefaultType,
+                allowTypeSelect: true,
+                statusLocked: 'bekliyor',
+                showDueDate: true,
+                showEstimate: true,
+                submitLabel: 'Kaydet',
+                submitClass: 'btn-warning'
+            }));
+        } catch (err) {
+            console.error('openGider error:', err);
+            showToast('Gider ekranı açılırken bir sorun oluştu.', 'error');
         }
-        currentProjectId = targetProjectId;
-        openModal('📦 Proje Maliyet / Ödeme Ekle', getTransactionFormHtml({
-            type: defaultType,
-            allowTypeSelect: true,
-            statusLocked: 'bekliyor',
-            showDueDate: true,
-            showEstimate: true,
-            submitLabel: 'Kaydet',
-            submitClass: 'btn-warning'
-        }));
     }
 
     function openMalzeme() { openGider('malzeme'); }
@@ -2390,14 +2403,16 @@ const App = (() => {
     function openTaseron() { openGider('iscilik-malzeme'); }
 
     function openIlaveIsModal(projectId = null) {
-        const targetProjectId = projectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
-        if (!targetProjectId) {
-            showToast('Lütfen önce bir proje oluşturun.', 'warning');
-            return;
-        }
-        currentProjectId = targetProjectId;
-        const project = getProject(currentProjectId);
-        if (!project) return;
+        try {
+            const validProjectId = (typeof projectId === 'string' && projectId.trim()) ? projectId : null;
+            const targetProjectId = validProjectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
+            if (!targetProjectId) {
+                showToast('Lütfen önce bir proje oluşturun.', 'warning');
+                return;
+            }
+            currentProjectId = targetProjectId;
+            const project = getProject(currentProjectId);
+            if (!project) return;
 
         const vendorSuggestions = getVendorSuggestions();
         const datalistHtml = vendorSuggestions.length > 0 ? `
@@ -2457,6 +2472,10 @@ const App = (() => {
             </form>
         `;
         openModal('✨ Müşteri İlave İş Sözleşmesi Ekle', html);
+        } catch (err) {
+            console.error('openIlaveIsModal error:', err);
+            showToast('İlave iş ekranı açılırken bir sorun oluştu.', 'error');
+        }
     }
 
     function saveIlaveIs(e) {
@@ -2506,15 +2525,26 @@ const App = (() => {
         refreshActiveView();
     }
 
-    function openOfisSabit() {
-        if (!currentProjectId) return;
-        openModal('🏢 Ofis Gideri Yansıt', getTransactionFormHtml({
-            type: 'ofis-sabit',
-            statusLocked: 'odendi',
-            showDueDate: false,
-            submitLabel: 'Gider Yansıt',
-            submitClass: 'btn-primary'
-        }));
+    function openOfisSabit(projectId = null) {
+        try {
+            const validProjectId = (typeof projectId === 'string' && projectId.trim()) ? projectId : null;
+            const targetProjectId = validProjectId || currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null);
+            if (!targetProjectId) {
+                showToast('Lütfen önce bir proje oluşturun.', 'warning');
+                return;
+            }
+            currentProjectId = targetProjectId;
+            openModal('🏢 Ofis Gideri Yansıt', getTransactionFormHtml({
+                type: 'ofis-sabit',
+                statusLocked: 'odendi',
+                showDueDate: false,
+                submitLabel: 'Gider Yansıt',
+                submitClass: 'btn-primary'
+            }));
+        } catch (err) {
+            console.error('openOfisSabit error:', err);
+            showToast('Gider ekranı açılırken bir sorun oluştu.', 'error');
+        }
     }
 
     // ─────────────────────────────────────
