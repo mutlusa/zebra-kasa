@@ -3723,16 +3723,24 @@ const App = (() => {
         const isLoan = ['borc-ver', 'borc-al'].includes(tx.type);
         let typeSelectHtml = '';
         if (isLoan) {
-            typeSelectHtml = `<input class="form-input" type="text" value="${typeInfo.label}" disabled>`;
+            typeSelectHtml = `<input class="form-input" type="text" value="${typeInfo.label}" disabled><input type="hidden" id="input-tx-type" value="${tx.type}">`;
         } else {
             typeSelectHtml = `
-                <select class="form-select" id="input-tx-type">
-                    <option value="malzeme" ${tx.type === 'malzeme' ? 'selected' : ''}>🧱 Malzeme</option>
-                    <option value="iscilik" ${tx.type === 'iscilik' ? 'selected' : ''}>👷 İşçilik Gideri (Usta)</option>
-                    <option value="iscilik-malzeme" ${tx.type === 'iscilik-malzeme' ? 'selected' : ''}>🛠️ İşçilik + Malzeme (Taşeron)</option>
-                    <option value="hakedis" ${tx.type === 'hakedis' ? 'selected' : ''}>💰 Müşteri Ödemesi</option>
-                    <option value="ofis-sabit" ${tx.type === 'ofis-sabit' ? 'selected' : ''}>🏢 Ofis Sabit Gideri</option>
-                </select>`;
+                <div id="tx-type-selector-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                    <button type="button" class="btn-tx-type ${tx.type === 'malzeme' ? 'active' : ''}" data-type="malzeme" onclick="App.switchTxType('malzeme')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${tx.type === 'malzeme' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${tx.type === 'malzeme' ? 'var(--accent)' : 'var(--glass-border)'}; color:${tx.type === 'malzeme' ? '#ffffff' : 'var(--text-muted)'};">
+                        <span>🧱</span> <span>Malzeme</span>
+                    </button>
+                    <button type="button" class="btn-tx-type ${tx.type === 'iscilik' ? 'active' : ''}" data-type="iscilik" onclick="App.switchTxType('iscilik')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${tx.type === 'iscilik' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${tx.type === 'iscilik' ? 'var(--accent)' : 'var(--glass-border)'}; color:${tx.type === 'iscilik' ? '#ffffff' : 'var(--text-muted)'};">
+                        <span>👷</span> <span>İşçilik Gideri (Usta)</span>
+                    </button>
+                    <button type="button" class="btn-tx-type ${tx.type === 'iscilik-malzeme' ? 'active' : ''}" data-type="iscilik-malzeme" onclick="App.switchTxType('iscilik-malzeme')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${tx.type === 'iscilik-malzeme' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${tx.type === 'iscilik-malzeme' ? 'var(--accent)' : 'var(--glass-border)'}; color:${tx.type === 'iscilik-malzeme' ? '#ffffff' : 'var(--text-muted)'};">
+                        <span>🛠️</span> <span>İşçilik + Malzeme (Taşeron)</span>
+                    </button>
+                    <button type="button" class="btn-tx-type ${tx.type === 'ofis-sabit' ? 'active' : ''}" data-type="ofis-sabit" onclick="App.switchTxType('ofis-sabit')" style="padding:10px 12px; font-size:0.82rem; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; text-align:left; background:${tx.type === 'ofis-sabit' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${tx.type === 'ofis-sabit' ? 'var(--accent)' : 'var(--glass-border)'}; color:${tx.type === 'ofis-sabit' ? '#ffffff' : 'var(--text-muted)'};">
+                        <span>🏢</span> <span>Ofis Sabit Gideri</span>
+                    </button>
+                </div>
+                <input type="hidden" id="input-tx-type" value="${tx.type}">`;
         }
 
         const html = `
