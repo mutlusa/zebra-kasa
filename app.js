@@ -2503,7 +2503,7 @@ const App = (() => {
 
         showToast(`✨ Ek Sözleşme Kaydedildi! Müşteri alacağına +${formatCurrency(clientAmount)} eklendi.`, 'success');
         closeModal();
-        renderProjectDetail(currentProjectId);
+        refreshActiveView();
     }
 
     function openOfisSabit() {
@@ -2670,7 +2670,7 @@ const App = (() => {
 
         closeModal();
         showToast(`🔄 ${formatCurrency(amount)} borç transferi oluşturuldu: ${lenderName} → ${borrowerName}`, 'success');
-        renderProjectDetail(currentProjectId);
+        refreshActiveView();
     }
 
     function onTxPeriodSelectChange(selectEl) {
@@ -2791,6 +2791,24 @@ const App = (() => {
         }
     }
 
+    function refreshActiveView() {
+        renderDashboard();
+        if (currentProjectId) {
+            renderProjectDetail(currentProjectId);
+        }
+    }
+
+    function onTxProjectChange(projectId, type) {
+        currentProjectId = projectId;
+        if (type === 'hakedis') {
+            openHakedis(projectId);
+        } else if (type === 'ilave-is') {
+            openIlaveIsModal(projectId);
+        } else {
+            openGider(type, projectId);
+        }
+    }
+
     function getTransactionFormHtml({ type, allowTypeSelect, statusLocked, showDueDate, showEstimate, submitLabel = 'Kaydet', submitClass = 'btn-primary', defaultScopeType }) {
         const typeInfo = TX_TYPES[type] || {};
 
@@ -2804,6 +2822,23 @@ const App = (() => {
         const project = getProject(currentProjectId);
         const signed = isContractSigned(project);
         const activeScope = defaultScopeType || (signed ? (type === 'ilave-is' ? 'ilave-is' : 'santiye-ici') : 'sözleşme');
+
+        let projectSelectHtml = '';
+        if (data.projects && data.projects.length > 0) {
+            const projectOptions = data.projects.map(p => {
+                const isSel = (p.id === currentProjectId) ? 'selected' : '';
+                return `<option value="${p.id}" ${isSel}>${escapeHtml(p.name)}</option>`;
+            }).join('');
+
+            projectSelectHtml = `
+                <div class="form-group">
+                    <label class="form-label" for="input-tx-project">İşlem Yapılacak Proje</label>
+                    <select class="form-select" id="input-tx-project" onchange="App.onTxProjectChange(this.value, '${type}')">
+                        ${projectOptions}
+                    </select>
+                </div>
+            `;
+        }
 
         const ilaveIsTxs = data.transactions.filter(t => t.projectId === currentProjectId && (t.type === 'ilave-is' || t.scopeType === 'ilave-is'));
         const ilaveOptionsHtml = ilaveIsTxs.map((t, index) => {
@@ -2923,6 +2958,7 @@ const App = (() => {
 
         return `
             <form onsubmit="App.saveTransaction(event, '${type}', '${statusLocked}')">
+                ${projectSelectHtml}
                 ${typeFieldHtml}
                 ${scopeSelectHtml}
                 <div class="form-group" id="group-client-addon" style="display:${activeScope === 'ilave-is' ? 'block' : 'none'}; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); padding:10px 12px; border-radius:8px; margin-bottom:14px;">
@@ -2963,7 +2999,15 @@ const App = (() => {
 
     function saveTransaction(e, defaultType, statusLocked) {
         e.preventDefault();
-        if (!currentProjectId) return;
+
+        const projectEl = document.getElementById('input-tx-project');
+        const targetProjectId = projectEl ? projectEl.value : (currentProjectId || (data.projects && data.projects.length > 0 ? data.projects[0].id : null));
+
+        if (!targetProjectId) {
+            showToast('Lütfen bir proje seçin.', 'error');
+            return;
+        }
+        currentProjectId = targetProjectId;
 
         const typeEl = document.getElementById('input-tx-type');
         const type = (typeEl && typeEl.value) ? typeEl.value : defaultType;
@@ -3002,13 +3046,13 @@ const App = (() => {
             return;
         }
 
-        addTransaction(type, currentProjectId, amount, statusLocked, dueDate, description, estimatedAmount, period, vendor, scopeType, clientAddonAmount);
+        addTransaction(type, targetProjectId, amount, statusLocked, dueDate, description, estimatedAmount, period, vendor, scopeType, clientAddonAmount);
 
         const typeInfo = TX_TYPES[type] || {};
         showToast(`${typeInfo.label} kaydedildi!`, 'success');
 
         closeModal();
-        renderProjectDetail(currentProjectId);
+        refreshActiveView();
     }
 
     function markAsPaid(txId) {
@@ -3253,12 +3297,7 @@ const App = (() => {
         }
 
         closeModal();
-
-        if (currentProjectId) {
-            renderProjectDetail(currentProjectId);
-        } else {
-            renderDashboard();
-        }
+        refreshActiveView();
     }
 
     function deleteTransaction(txId) {
@@ -3268,11 +3307,7 @@ const App = (() => {
             () => {
                 removeTransaction(txId);
                 showToast('İşlem silindi.', 'warning');
-                if (currentProjectId) {
-                    renderProjectDetail(currentProjectId);
-                } else {
-                    renderDashboard();
-                }
+                refreshActiveView();
             }
         );
     }
@@ -4331,11 +4366,7 @@ const App = (() => {
         closeModal();
         showToast('İşlem güncellendi.', 'success');
 
-        if (currentProjectId) {
-            renderProjectDetail(currentProjectId);
-        } else {
-            renderDashboard();
-        }
+        refreshActiveView();
     }
 
     // ─────────────────────────────────────
@@ -4395,6 +4426,9 @@ const App = (() => {
         parseAmountInput,
         formatDate,
         formatDateShort,
+        onTxPeriodSelectChange,
+        onTxProjectChange,
+        refreshActiveView,
         onAmountKeyDown,
         onPayAmountInput,
         onPayModeChange,
