@@ -32,6 +32,63 @@ const App = (() => {
         'tamamlandi':   'Tamamlandı'
     };
 
+    const PRESET_WORK_CATEGORIES = [
+        { name: 'Beton Kalıp', icon: '🏗️', keywords: ['beton', 'kalıp', 'kalip', 'demirc'] },
+        { name: 'Tesisat', icon: '🚰', keywords: ['tesisat', 'su tesisat', 'su boru', 'lavabo', 'gider'] },
+        { name: 'Yerden Isıtma', icon: '♨️', keywords: ['yerden ısıtma', 'yerden isitma', 'alttan ısıtma'] },
+        { name: 'Parke', icon: '🪵', keywords: ['parke', 'laminat', 'ahşap zemin', 'ahsap zemin'] },
+        { name: 'İç Kapı', icon: '🚪', keywords: ['kapı', 'kapi', 'iç kapı', 'ic kapi', 'amerikan kapı'] },
+        { name: 'Seramik', icon: '🔲', keywords: ['seramik', 'fayans', 'granit', 'kalebodur'] },
+        { name: "20'lik duvar", icon: '🧱', keywords: ['20\'lik', 'tuğla', 'tugla', 'bims'] },
+        { name: "10'luk duvar", icon: '🧱', keywords: ['10\'luk'] },
+        { name: 'Örülecek duvar', icon: '🧱', keywords: ['duvar', 'örülecek', 'orulecek', 'gazbeton'] },
+        { name: 'Kırım', icon: '🔨', keywords: ['kırım', 'kirim', 'yıkım', 'yikim', 'söküm', 'sokum', 'hafriyat', 'harfiyat'] },
+        { name: 'Şap', icon: '🪨', keywords: ['şap', 'sap'] },
+        { name: 'Kum çimento', icon: '🪨', keywords: ['kum', 'çimento', 'cimento', 'harç', 'harc'] },
+        { name: 'Mutfak', icon: '🍳', keywords: ['mutfak', 'mutfak dolabı', 'mutfak dolabi'] },
+        { name: 'Banyo dolabı', icon: '🛁', keywords: ['banyo', 'banyo dolabı', 'banyo dolabi', 'duşa kabin', 'dusakabin'] },
+        { name: 'Vestiyer', icon: '👔', keywords: ['vestiyer', 'portmanto', 'gardırop', 'gardrop'] },
+        { name: 'Tezgah', icon: '🍽️', keywords: ['tezgah', 'çimstone', 'cimstone', 'mermer'] },
+        { name: 'Çatı Tamiri', icon: '🏠', keywords: ['çatı tamir', 'cati tamir', 'tamir'] },
+        { name: 'Çatı Yapılması', icon: '🛖', keywords: ['çatı', 'cati', 'izolasyon', 'membran'] },
+        { name: 'Dış Cephe', icon: '🏢', keywords: ['dış cephe', 'dis cephe', 'mantolama', 'sıva', 'siva'] },
+        { name: 'Elektrik', icon: '⚡', keywords: ['elektrik', 'kablo', 'anahtar', 'priz', 'sigorta', 'aydınlatma', 'spot'] },
+        { name: 'Alçı Boya', icon: '🎨', keywords: ['alçı', 'alci', 'boya', 'badan', 'saten', 'alçıpan', 'alcipan'] },
+        { name: 'Doğrama (Pencere)', icon: '🪟', keywords: ['doğrama', 'dograma', 'pencere', 'pvc', 'pimapen', 'cam'] },
+        { name: 'Isı pompası', icon: '🌡️', keywords: ['ısı pompası', 'isi pompasi', 'pompa'] },
+        { name: 'Şofben vs', icon: '🔥', keywords: ['şofben', 'sofben', 'kombi', 'termosifon'] },
+        { name: 'Merdiven', icon: '🪜', keywords: ['merdiven', 'küpeşte', 'kupeste', 'basamak'] }
+    ];
+
+    function getWorkCategoryIcon(text) {
+        if (!text || typeof text !== 'string') return '';
+        const lower = text.toLowerCase().trim();
+        for (const cat of PRESET_WORK_CATEGORIES) {
+            if (cat.keywords.some(kw => lower.includes(kw))) {
+                return cat.icon;
+            }
+        }
+        return '';
+    }
+
+    function getDescriptionSuggestionsHtml() {
+        const set = new Set();
+        PRESET_WORK_CATEGORIES.forEach(c => set.add(c.name));
+        if (data && Array.isArray(data.transactions)) {
+            data.transactions.forEach(t => {
+                if (t.description && typeof t.description === 'string' && t.description.trim()) {
+                    set.add(t.description.trim());
+                }
+            });
+        }
+        const items = Array.from(set);
+        return `
+            <datalist id="description-suggestions-list">
+                ${items.map(name => `<option value="${escapeHtml(name)}">`).join('')}
+            </datalist>
+        `;
+    }
+
     const MONTHS_TR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
     const MONTHS_FULL_TR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
     const DAYS_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
@@ -862,6 +919,9 @@ const App = (() => {
                 partialBadge = `<span style="font-size:0.65rem; padding:2px 6px; border-radius:4px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:700; white-space:nowrap;">⚠️ %${pct} ödendi</span>`;
             }
 
+            const workIcon = getWorkCategoryIcon(tx.description);
+            const descWithIcon = workIcon ? `${workIcon} ${escapeHtml(tx.description || typeInfo.label)}` : escapeHtml(tx.description || typeInfo.label);
+
             return `
                 <div class="payment-item ${overdue ? 'overdue' : ''}" onclick="App.showProject('${tx.projectId}')" style="cursor:pointer;" title="Projeye git: ${project ? escapeHtml(project.name) : ''}">
                     <div class="payment-date">
@@ -870,7 +930,7 @@ const App = (() => {
                         <div style="font-size:0.65rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; margin-top:2px;">${ds.dayName || ''}</div>
                     </div>
                     <div class="payment-info">
-                        <div class="payment-desc">${escapeHtml(tx.description || typeInfo.label)}${tx.vendor ? `<span style="font-size:0.75rem; font-weight:700; color:var(--accent); margin-left:6px;">🏢 ${escapeHtml(tx.vendor)}</span>` : ''}</div>
+                        <div class="payment-desc">${descWithIcon}${tx.vendor ? `<span style="font-size:0.75rem; font-weight:700; color:var(--accent); margin-left:6px;">🏢 ${escapeHtml(tx.vendor)}</span>` : ''}</div>
                         <div class="payment-project">${project ? escapeHtml(project.name) : '—'} · <span style="color:var(--text-secondary); font-size:0.75rem;">${formatDate(tx.dueDate)}</span></div>
                         ${isPartial ? `<div style="font-size:0.7rem; margin-top:3px; color:var(--text-muted);">Toplam: ${formatCurrency(tx.amount)} · Ödenen: ${formatCurrency(paidAmt)}</div>` : ''}
                     </div>
@@ -1339,13 +1399,15 @@ const App = (() => {
             payButtonLabel = `💳 Kalan ${formatCurrency(remaining)} Öde`;
         }
 
+        const workIcon = getWorkCategoryIcon(tx.description);
+        const descWithIcon = workIcon ? `${workIcon} ${escapeHtml(tx.description || typeInfo.label)}` : escapeHtml(tx.description || typeInfo.label);
         const vendorLine = tx.vendor ? `<div style="font-size:0.75rem; font-weight:700; color:var(--accent); margin-top:2px;">🏢 ${escapeHtml(tx.vendor)}</div>` : '';
 
         return `
             <div class="transaction-item">
-                <div class="tx-icon ${typeInfo.cssClass || ''}">${typeInfo.icon || '📄'}</div>
+                <div class="tx-icon ${typeInfo.cssClass || ''}">${workIcon || typeInfo.icon || '📄'}</div>
                 <div class="tx-info">
-                    <div class="tx-desc">${escapeHtml(tx.description || typeInfo.label)}</div>
+                    <div class="tx-desc">${descWithIcon}</div>
                     ${vendorLine}
                     <div class="tx-date">${dateLabelText} · ${typeInfo.label}${periodLabelText}</div>
                     ${estimateLine}
@@ -2386,8 +2448,9 @@ const App = (() => {
                 </div>
                 ` : ''}
                 <div class="form-group">
-                    <label class="form-label" for="input-tx-description">Açıklama</label>
-                    <input class="form-input" type="text" id="input-tx-description" placeholder="Kısa açıklama (ör: mutfak dolabı montajı)...">
+                    <label class="form-label" for="input-tx-description">Açıklama / İş Kalemi</label>
+                    <input class="form-input" type="text" id="input-tx-description" list="description-suggestions-list" placeholder="Örn: Beton Kalıp, Parke, Elektrik, Alçı Boya..." autocomplete="off">
+                    ${getDescriptionSuggestionsHtml()}
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-outline" onclick="App.closeModal()">İptal</button>
@@ -2484,9 +2547,12 @@ const App = (() => {
             </div>
         `;
 
+        const workIcon = getWorkCategoryIcon(tx.description);
+        const descWithIcon = workIcon ? `${workIcon} ${escapeHtml(tx.description || typeInfo.label)}` : escapeHtml(tx.description || typeInfo.label);
+
         const html = `
             <div class="import-info" style="margin-bottom: 10px;">
-                💳 <strong>${escapeHtml(tx.description || typeInfo.label)}</strong>
+                💳 <strong>${descWithIcon}</strong>
                 ${tx.vendor ? `<span style="font-size:0.8rem; font-weight:700; color:var(--accent); background:rgba(99,102,241,0.15); padding:2px 8px; border-radius:4px; margin-left:6px;">🏢 ${escapeHtml(tx.vendor)}</span>` : ''}<br>
                 <span style="font-size:0.82rem; color:var(--text-muted);">Vade: ${formattedDate} · 👤 ${escapeHtml(tx.createdBy || 'Bilinmiyor')}</span>
             </div>
@@ -3662,8 +3728,9 @@ const App = (() => {
                     <input class="form-input" type="date" id="input-tx-due-date" value="${tx.dueDate || ''}">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="input-tx-description">Açıklama</label>
-                    <input class="form-input" type="text" id="input-tx-description" value="${escapeHtml(tx.description || '')}">
+                    <label class="form-label" for="input-tx-description">Açıklama / İş Kalemi</label>
+                    <input class="form-input" type="text" id="input-tx-description" list="description-suggestions-list" value="${escapeHtml(tx.description || '')}" autocomplete="off">
+                    ${getDescriptionSuggestionsHtml()}
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="input-tx-status">Ödeme Durumu</label>
