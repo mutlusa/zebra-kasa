@@ -460,9 +460,10 @@ const App = (() => {
 
     /**
      * Resolves the effective due date for a transaction.
-     * 1. Uses explicit tx.dueDate if set
-     * 2. If empty and assigned to a period, resolves period.date
-     * 3. If still empty and transaction is pending (bekliyor), falls back to createdAt or today (immediate obligation)
+     * 1. Uses explicit tx.dueDate if set.
+     * 2. If assigned to a period with a valid date, uses period.date.
+     * 3. If assigned to İş Bitimi or a period without a date, returns '' (matches that period, not immediate 30-day risk).
+     * 4. Only if unassigned to any period (period = 0) and pending, defaults to createdAt/today.
      */
     function getTxDueDate(tx) {
         if (tx.dueDate) return tx.dueDate;
@@ -470,7 +471,12 @@ const App = (() => {
             const project = getProject(tx.projectId);
             if (project && project.periods && Array.isArray(project.periods)) {
                 const pObj = project.periods.find(p => p.number === tx.period);
-                if (pObj && pObj.date) return pObj.date;
+                if (pObj) {
+                    if (pObj.date) return pObj.date;
+                    // If assigned to a period (e.g. İş Bitimi or Ara Ödeme) without an explicit date,
+                    // it belongs to that specific period's cash flow, NOT immediate 30-day risk!
+                    return '';
+                }
             }
         }
         if (tx.paymentStatus === 'bekliyor') {
@@ -1763,15 +1769,25 @@ const App = (() => {
         let completionDate = document.getElementById('input-completion-date')?.value || '';
 
         if (existingPeriods && existingPeriods.length > 0) {
+            // Find completion period (last item or explicitly marked isCompletion)
+            const compObj = existingPeriods.find(p => p.isCompletion) || (existingPeriods.length > 1 ? existingPeriods[existingPeriods.length - 1] : null);
+            if (compObj) {
+                completionAmt = compObj.amount || 0;
+                completionDate = compObj.date || '';
+            }
+
+            // Find downpayment period
             const dpObj = existingPeriods.find(p => p.isDownpayment);
             if (dpObj) {
                 downpaymentAmt = dpObj.amount || 0;
                 downpaymentDate = dpObj.date || '';
-            }
-            const compObj = existingPeriods.find(p => p.isCompletion);
-            if (compObj) {
-                completionAmt = compObj.amount || 0;
-                completionDate = compObj.date || '';
+            } else if (existingPeriods.length > 1 && existingPeriods[0] !== compObj) {
+                // Check if first period is Peşinat
+                const firstLabel = (existingPeriods[0].label || '').toLowerCase();
+                if (firstLabel.includes('peşin')) {
+                    downpaymentAmt = existingPeriods[0].amount || 0;
+                    downpaymentDate = existingPeriods[0].date || '';
+                }
             }
         }
 
