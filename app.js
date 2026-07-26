@@ -330,7 +330,7 @@ const App = (() => {
             name: name.trim(),
             contractAmount: parseFloat(contractAmount) || 0,
             status: status || 'devam-ediyor',
-            periodCount: parseInt(periodCount) || 4,
+            periodCount: (periodCount !== undefined && periodCount !== null && !isNaN(periodCount)) ? parseInt(periodCount, 10) : 0,
             completionAmount: parseFloat(completionAmount) || 0,
             periods: periods || [],
             createdAt: new Date().toISOString()
@@ -346,7 +346,7 @@ const App = (() => {
         project.name = name.trim();
         project.contractAmount = parseFloat(contractAmount) || 0;
         project.status = status || project.status;
-        project.periodCount = parseInt(periodCount) || 4;
+        project.periodCount = (periodCount !== undefined && periodCount !== null && !isNaN(periodCount)) ? parseInt(periodCount, 10) : 0;
         project.completionAmount = parseFloat(completionAmount) || 0;
         project.periods = periods || [];
         saveData();
@@ -1602,7 +1602,15 @@ const App = (() => {
         const amount = project ? (project.contractAmount ? project.contractAmount.toLocaleString('tr-TR') : '') : '';
         const statusDevam = (!project || project.status === 'devam-ediyor') ? 'selected' : '';
         const statusTamam = (project && project.status === 'tamamlandi') ? 'selected' : '';
-        const periodCount = project ? (project.periodCount !== undefined ? project.periodCount : 0) : 0;
+        let periodCount = 0;
+        if (project) {
+            if (project.periods && Array.isArray(project.periods)) {
+                const inters = project.periods.filter(p => !p.isDownpayment && !p.isCompletion);
+                periodCount = inters.length;
+            } else if (project.periodCount !== undefined && project.periodCount !== null) {
+                periodCount = parseInt(project.periodCount, 10) || 0;
+            }
+        }
         const editId = project ? project.id : '';
 
         return `
