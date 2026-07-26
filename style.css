@@ -1885,3 +1885,21 @@ body::before {
     transform: translateX(4px);
     box-shadow: -3px 0 0 0 var(--accent);
 }
+
+/* White calendar picker indicators & calendar icons */
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.2);
+    cursor: pointer;
+    opacity: 0.9;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+.calendar-icon,
+svg.calendar-icon,
+.icon-calendar {
+    stroke: #ffffff !important;
+    color: #ffffff !important;
+}

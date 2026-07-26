@@ -1097,7 +1097,7 @@ const App = (() => {
             riskLabel.textContent = risk >= 0 ? '30 Günlük Tahmini Bakiye' : '30 Günlük Riskli Bakiye';
         }
 
-        // Profitability & Remaining Agreed Balance analysis
+        // Müşteri Cari Mutabakat Ekstresi & Kârlılık Analizi
         renderProfitability(projectId);
 
         // Period cash flow table
@@ -1105,6 +1105,83 @@ const App = (() => {
 
         // Transactions list
         renderProjectTransactions(projectId);
+    }
+
+    function getClientStatement(projectId) {
+        const project = getProject(projectId);
+        if (!project) return null;
+
+        const baseContract = getProjectBaseContractAmount(projectId);
+        const addonContract = getProjectAddonContractAmount(projectId);
+        const totalContract = getProjectContractAmount(projectId);
+
+        const hakedisTxs = data.transactions.filter(t => t.projectId === projectId && t.type === 'hakedis' && t.paymentStatus === 'odendi');
+
+        let mainPaid = 0;
+        let addonPaid = 0;
+
+        hakedisTxs.forEach(t => {
+            if (t.period && typeof t.period === 'string' && t.period.startsWith('ilave-')) {
+                addonPaid += t.amount;
+            } else {
+                mainPaid += t.amount;
+            }
+        });
+
+        const mainRemaining = Math.max(0, baseContract - mainPaid);
+        const addonRemaining = Math.max(0, addonContract - addonPaid);
+        const totalPaid = mainPaid + addonPaid;
+        const totalRemaining = Math.max(0, totalContract - totalPaid);
+
+        return {
+            baseContract,
+            addonContract,
+            totalContract,
+            mainPaid,
+            addonPaid,
+            totalPaid,
+            mainRemaining,
+            addonRemaining,
+            totalRemaining
+        };
+    }
+
+    function renderClientStatement(projectId) {
+        const stmt = getClientStatement(projectId);
+        if (!stmt) return '';
+
+        return `
+            <div class="card" style="margin-bottom:14px; background:linear-gradient(135deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8)); border:1px solid rgba(99,102,241,0.25);">
+                <div style="padding:10px 14px; border-bottom:1px solid var(--glass-border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                    <span style="font-weight:700; font-size:0.82rem; color:#ffffff; display:flex; align-items:center; gap:8px;">
+                        🏛️ Müşteri Cari Mutabakat Ekstresi (Ana Sözleşme vs İlave İşler)
+                    </span>
+                    <span class="badge badge-primary" style="font-size:0.68rem; font-weight:700;">Live Statement</span>
+                </div>
+                <div style="padding:12px 14px;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+                        <div style="background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border:1px solid var(--glass-border);">
+                            <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase;">🏛️ Ana Sözleşme</div>
+                            <div style="font-size:1.05rem; font-weight:800; color:#ffffff; margin-top:2px;">${formatCurrency(stmt.baseContract)}</div>
+                            <div style="font-size:0.72rem; color:var(--success); margin-top:4px;">Tahsil Edilen: ${formatCurrency(stmt.mainPaid)}</div>
+                            <div style="font-size:0.75rem; color:${stmt.mainRemaining > 0 ? '#f59e0b' : 'var(--success)'}; font-weight:800; margin-top:2px;">Kalan Borç: ${formatCurrency(stmt.mainRemaining)}</div>
+                        </div>
+                        <div style="background:rgba(245,158,11,0.06); padding:10px 12px; border-radius:8px; border:1px solid rgba(245,158,11,0.2);">
+                            <div style="color:#f59e0b; font-size:0.7rem; font-weight:700; text-transform:uppercase;">✨ İlave İşler Toplamı</div>
+                            <div style="font-size:1.05rem; font-weight:800; color:#ffffff; margin-top:2px;">${formatCurrency(stmt.addonContract)}</div>
+                            <div style="font-size:0.72rem; color:var(--success); margin-top:4px;">Tahsil Edilen: ${formatCurrency(stmt.addonPaid)}</div>
+                            <div style="font-size:0.75rem; color:${stmt.addonRemaining > 0 ? '#f59e0b' : 'var(--success)'}; font-weight:800; margin-top:2px;">Kalan Borç: ${formatCurrency(stmt.addonRemaining)}</div>
+                        </div>
+                        <div style="background:rgba(99,102,241,0.08); padding:10px 12px; border-radius:8px; border:1px solid rgba(99,102,241,0.25);">
+                            <div style="color:var(--accent); font-size:0.7rem; font-weight:700; text-transform:uppercase;">💰 Toplam Müşteri Borcu</div>
+                            <div style="font-size:1.05rem; font-weight:800; color:#ffffff; margin-top:2px;">${formatCurrency(stmt.totalContract)}</div>
+                            <div style="font-size:0.72rem; color:var(--success); margin-top:4px;">Toplam Tahsilat: ${formatCurrency(stmt.totalPaid)}</div>
+                            <div style="font-size:0.75rem; color:${stmt.totalRemaining > 0 ? 'var(--danger)' : 'var(--success)'}; font-weight:800; margin-top:2px;">Net Alacak: ${formatCurrency(stmt.totalRemaining)}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     function renderProfitability(projectId) {
@@ -1141,6 +1218,7 @@ const App = (() => {
         const agreedExpenseRemaining = Math.max(0, agreedExpenseTotal - paidExpenseTotal);
 
         container.innerHTML = `
+            ${renderClientStatement(projectId)}
             <div class="profit-card">
                 <div class="profit-card-title" onclick="this.parentElement.classList.toggle('collapsed')" style="cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:space-between;">
                     <span style="display:flex; align-items:center; gap:8px;">
@@ -2329,6 +2407,22 @@ const App = (() => {
                     <div style="font-size:0.72rem; color:var(--text-muted); margin-top:3px;">Bu miktar müşterinin toplam sözleşme alacağına ve hakedişine eklenir.</div>
                 </div>
                 <div class="form-group">
+                    <label class="form-label" for="input-addon-tracking">Müşteri Cari Takip Yöntemi</label>
+                    <select class="form-select" id="input-addon-tracking">
+                        <option value="combined">📊 Birleşik Cari Takip (Ana Sözleşme Hakedişlerine Dahil)</option>
+                        <option value="separate">🎯 Ayrı Ek Sözleşme Takibi (Bu İş İçin Özel Tahsilat Planı)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="group-addon-terms">
+                    <label class="form-label" for="input-addon-terms">Müşteri Tahsilat Planı</label>
+                    <select class="form-select" id="input-addon-terms">
+                        <option value="full-upfront">⚡ %100 Peşin (İlave İşe Başlarken)</option>
+                        <option value="split-job">🌓 %50 Peşin, %50 İlave İş Bitiminde</option>
+                        <option value="split-project">🏁 %50 Peşin, %50 Ana Proje Tesliminde</option>
+                        <option value="job-end">🏁 %100 İlave İş Bitiminde</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label" for="input-addon-cost-amount">Maliyeti / Ustaya Anlaşılan Harcama Tutarı (₺) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
                     <input class="form-input" type="text" inputmode="numeric" id="input-addon-cost-amount" placeholder="Opsiyonel" oninput="App.formatAmountInput(this)">
                 </div>
@@ -2356,6 +2450,8 @@ const App = (() => {
 
         const title = document.getElementById('input-addon-title').value.trim();
         const clientAmount = parseAmountInput(document.getElementById('input-addon-client-amount'));
+        const trackingMode = document.getElementById('input-addon-tracking').value;
+        const paymentTerms = document.getElementById('input-addon-terms').value;
         const costAmount = parseAmountInput(document.getElementById('input-addon-cost-amount'));
         const vendor = document.getElementById('input-addon-vendor').value.trim();
         const dueDate = document.getElementById('input-addon-due-date').value || '';
@@ -2370,7 +2466,7 @@ const App = (() => {
             return;
         }
 
-        addTransaction(
+        const tx = addTransaction(
             'ilave-is',
             currentProjectId,
             costAmount,
@@ -2383,6 +2479,12 @@ const App = (() => {
             'ilave-is',
             clientAmount
         );
+
+        if (tx) {
+            tx.trackingMode = trackingMode;
+            tx.paymentTerms = paymentTerms;
+            saveData();
+        }
 
         showToast(`✨ Ek Sözleşme Kaydedildi! Müşteri alacağına +${formatCurrency(clientAmount)} eklendi.`, 'success');
         closeModal();
@@ -2670,13 +2772,17 @@ const App = (() => {
         const signed = isContractSigned(project);
         const activeScope = defaultScopeType || (signed ? (type === 'ilave-is' ? 'ilave-is' : 'santiye-ici') : 'sözleşme');
 
-        let periodSelectHtml = '';
-        let initialAmountStr = '';
+        const ilaveIsTxs = data.transactions.filter(t => t.projectId === currentProjectId && (t.type === 'ilave-is' || t.scopeType === 'ilave-is'));
+        const ilaveOptionsHtml = ilaveIsTxs.map((t, index) => {
+            const cleanTitle = t.description ? t.description.replace(/^✨ Ek Sözleşme:\s*/, '') : 'İlave İş';
+            const label = `✨ ${index + 1}. İlave İş: ${escapeHtml(cleanTitle)} (+${formatCurrency(t.clientAddonAmount || 0)})`;
+            return `<option value="ilave-${t.id}">${label}</option>`;
+        }).join('');
 
-        if (project && project.periods && project.periods.length > 0) {
+        if ((project && project.periods && project.periods.length > 0) || ilaveIsTxs.length > 0) {
             let defaultPeriodNum = 0;
 
-            if (type === 'hakedis') {
+            if (type === 'hakedis' && project && project.periods) {
                 // Find first uncollected period
                 for (const p of project.periods) {
                     const collected = data.transactions
@@ -2696,17 +2802,18 @@ const App = (() => {
                 }
             }
 
-            const options = project.periods.map(p => {
+            const options = (project && project.periods) ? project.periods.map(p => {
                 const isSel = (p.number === defaultPeriodNum) ? 'selected' : '';
                 return `<option value="${p.number}" ${isSel}>${escapeHtml(p.label)} (${formatCurrency(p.amount)})</option>`;
-            }).join('');
+            }).join('') : '';
 
             periodSelectHtml = `
                 <div class="form-group">
-                    <label class="form-label" for="input-tx-period">Ödeme Dönemi</label>
+                    <label class="form-label" for="input-tx-period">Ödeme Dönemi / İlave İş Ataması</label>
                     <select class="form-select" id="input-tx-period" onchange="App.onTxPeriodSelectChange(this)">
-                        <option value="0" ${defaultPeriodNum === 0 ? 'selected' : ''}>Dönem Atanmamış</option>
-                        ${options}
+                        <option value="0" ${defaultPeriodNum === 0 ? 'selected' : ''}>Dönem Atanmamış (Genel Bakiye)</option>
+                        ${options ? `<optgroup label="📋 Ana Sözleşme Dönemleri">${options}</optgroup>` : ''}
+                        ${ilaveOptionsHtml ? `<optgroup label="✨ İlave İş Sözleşmeleri">${ilaveOptionsHtml}</optgroup>` : ''}
                     </select>
                 </div>
             `;
@@ -2769,7 +2876,17 @@ const App = (() => {
             scopeSelectHtml = `<input type="hidden" id="input-tx-scope-type" value="${activeScope}">`;
         }
 
-        const isSantiyeIci = activeScope === 'santiye-ici';
+        const isSantiyeIci = (signed && type !== 'hakedis' && activeScope !== 'ilave-is') || activeScope === 'santiye-ici';
+
+        let vendorFieldHtml = '';
+        if (type !== 'hakedis') {
+            vendorFieldHtml = `
+                <div class="form-group">
+                    <label class="form-label" for="input-tx-vendor">Firma / Usta / Taşeron (Alacaklı) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
+                    <input class="form-input" type="text" id="input-tx-vendor" list="vendor-suggestions-list" placeholder="Örn: ABC Yapı, Ahmet Usta, Demir A.Ş." autocomplete="off">
+                    ${datalistHtml}
+                </div>`;
+        }
 
         return `
             <form onsubmit="App.saveTransaction(event, '${type}', '${statusLocked}')">
@@ -2780,11 +2897,7 @@ const App = (() => {
                     <input class="form-input" type="text" inputmode="numeric" id="input-client-addon-amount" placeholder="0" oninput="App.formatAmountInput(this)">
                     <div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Bu tutar müşterinin toplam sözleşme alacağına eklenir.</div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="input-tx-vendor">Firma / Usta / Taşeron (Alacaklı) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
-                    <input class="form-input" type="text" id="input-tx-vendor" list="vendor-suggestions-list" placeholder="Örn: ABC Yapı, Ahmet Usta, Demir A.Ş." autocomplete="off">
-                    ${datalistHtml}
-                </div>
+                ${vendorFieldHtml}
                 ${periodSelectHtml}
                 ${showEstimate ? `
                 <div class="form-group" id="group-tx-estimated">
