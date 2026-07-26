@@ -2547,8 +2547,8 @@ const App = (() => {
         const currentUser = getUserName();
         const remaining = getTxRemainingAmount(tx);
 
-        if (payAmount <= 0) {
-            showToast('Ödeme tutarı 0\'dan büyük olmalıdır.', 'error');
+        if (payAmount < 0) {
+            showToast('Ödeme tutarı sıfırdan küçük olamaz.', 'error');
             return;
         }
 
