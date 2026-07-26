@@ -2375,15 +2375,14 @@ const App = (() => {
         const periodEl = document.getElementById('input-tx-period');
         const period = periodEl ? parseInt(periodEl.value) || 0 : 0;
 
-        // If it's hakedis, we require amount.
-        if (type === 'hakedis' && amount <= 0) {
-            showToast('Hakediş tutarı 0\'dan büyük olmalıdır.', 'error');
+        // Allow 0 amounts (e.g. for logging items without cost/income or adjustments)
+        if (type === 'hakedis' && amount < 0) {
+            showToast('Tahsilat tutarı sıfırdan küçük olamaz.', 'error');
             return;
         }
 
-        // For expenses, at least one of estimatedAmount or amount must be > 0.
-        if (type !== 'hakedis' && amount <= 0 && (!estimatedAmount || estimatedAmount <= 0)) {
-            showToast('Lütfen tahmini maliyet veya anlaşılan tutardan en az birini girin.', 'error');
+        if (type !== 'hakedis' && amount < 0 && (!estimatedAmount || estimatedAmount < 0)) {
+            showToast('Lütfen geçerli bir tutar veya tahmini maliyet girin.', 'error');
             return;
         }
 
