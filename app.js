@@ -13,12 +13,13 @@ const App = (() => {
     const RISK_DAYS = 30;
 
     const TX_TYPES = {
-        hakedis:    { label: 'Müşteri Ödemesi',     icon: '💰', direction: 'income',  cssClass: 'income' },
-        malzeme:    { label: 'Malzeme Ödemesi',     icon: '🧱', direction: 'expense', cssClass: 'expense' },
-        iscilik:    { label: 'İşçilik Gideri',      icon: '👷', direction: 'expense', cssClass: 'expense' },
-        'ofis-sabit': { label: 'Ofis Sabit Gideri', icon: '🏢', direction: 'expense', cssClass: 'ofis' },
-        'borc-ver': { label: 'Proje Borç Verme',   icon: '↗️', direction: 'expense', cssClass: 'loan-out' },
-        'borc-al':  { label: 'Proje Borç Alma',    icon: '↙️', direction: 'income',  cssClass: 'loan-in' }
+        hakedis:            { label: 'Müşteri Ödemesi',             icon: '💰', direction: 'income',  cssClass: 'income' },
+        malzeme:            { label: 'Malzeme Ödemesi',             icon: '🧱', direction: 'expense', cssClass: 'expense' },
+        iscilik:            { label: 'İşçilik Gideri (Usta)',       icon: '👷', direction: 'expense', cssClass: 'expense' },
+        'iscilik-malzeme':  { label: 'İşçilik + Malzeme (Taşeron)', icon: '🛠️', direction: 'expense', cssClass: 'expense' },
+        'ofis-sabit':       { label: 'Ofis Sabit Gideri',         icon: '🏢', direction: 'expense', cssClass: 'ofis' },
+        'borc-ver':         { label: 'Proje Borç Verme',           icon: '↗️', direction: 'expense', cssClass: 'loan-out' },
+        'borc-al':          { label: 'Proje Borç Alma',            icon: '↙️', direction: 'income',  cssClass: 'loan-in' }
     };
 
     const STATUS_LABELS = {
@@ -379,7 +380,7 @@ const App = (() => {
         return Math.max(0, tx.amount - paid);
     }
 
-    function addTransaction(type, projectId, amount, paymentStatus, dueDate, description, estimatedAmount, period) {
+    function addTransaction(type, projectId, amount, paymentStatus, dueDate, description, estimatedAmount, period, vendor) {
         const currentUser = getUserName();
         const amtVal = parseFloat(amount) || 0;
         const isPaid = (paymentStatus === 'odendi');
@@ -393,6 +394,7 @@ const App = (() => {
             paymentStatus: paymentStatus || 'bekliyor',
             dueDate: dueDate || '',
             description: (description || '').trim(),
+            vendor: (vendor || '').trim(),
             period: parseInt(period) || 0,
             createdBy: currentUser,
             createdAt: new Date().toISOString(),
@@ -443,7 +445,7 @@ const App = (() => {
      *  - borc-al repayments: payments[] on borc-al count as expenses (money leaving)
      */
     function getProjectExpense(projectId) {
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit', 'borc-ver'];
+        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit', 'borc-ver'];
         return data.transactions
             .filter(t => t.projectId === projectId)
             .reduce((sum, t) => {
@@ -497,7 +499,7 @@ const App = (() => {
         const limit = new Date(today);
         limit.setDate(limit.getDate() + RISK_DAYS);
 
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit', 'borc-al'];
+        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit', 'borc-al'];
         return data.transactions
             .filter(t => {
                 if (t.projectId !== projectId) return false;
@@ -526,7 +528,7 @@ const App = (() => {
      * yoksa amount'ı kullan. (ödendi/bekliyor fark etmez — toplam projeksiyon)
      */
     function getProjectEstimatedCost(projectId) {
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit'];
+        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'];
         return data.transactions
             .filter(t => t.projectId === projectId && expenseTypes.includes(t.type))
             .reduce((sum, t) => sum + (t.estimatedAmount > 0 ? t.estimatedAmount : t.amount), 0);
@@ -534,7 +536,7 @@ const App = (() => {
 
     /** Güncel toplam maliyet: tüm giderlerin gerçek/anlaşılan tutarları */
     function getProjectCurrentCost(projectId) {
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit'];
+        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'];
         return data.transactions
             .filter(t => t.projectId === projectId && expenseTypes.includes(t.type))
             .reduce((sum, t) => sum + t.amount, 0);
@@ -564,7 +566,7 @@ const App = (() => {
     }
 
     function getTotalExpense() {
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit'];
+        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'];
         return data.transactions
             .filter(t => expenseTypes.includes(t.type) && t.paymentStatus === 'odendi')
             .reduce((sum, t) => sum + t.amount, 0);
@@ -588,7 +590,7 @@ const App = (() => {
         const limit = new Date(today);
         limit.setDate(limit.getDate() + RISK_DAYS);
 
-        const expenseTypes = ['malzeme', 'iscilik', 'ofis-sabit', 'borc-al'];
+        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit', 'borc-al'];
         return data.transactions
             .filter(t => {
                 if (!expenseTypes.includes(t.type)) return false;
@@ -868,7 +870,7 @@ const App = (() => {
                         <div style="font-size:0.65rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; margin-top:2px;">${ds.dayName || ''}</div>
                     </div>
                     <div class="payment-info">
-                        <div class="payment-desc">${escapeHtml(tx.description || typeInfo.label)}</div>
+                        <div class="payment-desc">${escapeHtml(tx.description || typeInfo.label)}${tx.vendor ? `<span style="font-size:0.75rem; font-weight:700; color:var(--accent); margin-left:6px;">🏢 ${escapeHtml(tx.vendor)}</span>` : ''}</div>
                         <div class="payment-project">${project ? escapeHtml(project.name) : '—'} · <span style="color:var(--text-secondary); font-size:0.75rem;">${formatDate(tx.dueDate)}</span></div>
                         ${isPartial ? `<div style="font-size:0.7rem; margin-top:3px; color:var(--text-muted);">Toplam: ${formatCurrency(tx.amount)} · Ödenen: ${formatCurrency(paidAmt)}</div>` : ''}
                     </div>
@@ -1337,11 +1339,14 @@ const App = (() => {
             payButtonLabel = `💳 Kalan ${formatCurrency(remaining)} Öde`;
         }
 
+        const vendorLine = tx.vendor ? `<div style="font-size:0.75rem; font-weight:700; color:var(--accent); margin-top:2px;">🏢 ${escapeHtml(tx.vendor)}</div>` : '';
+
         return `
             <div class="transaction-item">
                 <div class="tx-icon ${typeInfo.cssClass || ''}">${typeInfo.icon || '📄'}</div>
                 <div class="tx-info">
                     <div class="tx-desc">${escapeHtml(tx.description || typeInfo.label)}</div>
+                    ${vendorLine}
                     <div class="tx-date">${dateLabelText} · ${typeInfo.label}${periodLabelText}</div>
                     ${estimateLine}
                     ${createdByLine}
@@ -2062,10 +2067,11 @@ const App = (() => {
         }));
     }
 
-    function openMalzeme() {
+    function openGider(defaultType = 'malzeme') {
         if (!currentProjectId) return;
-        openModal('🧱 Malzeme Ödemesi Ekle', getTransactionFormHtml({
-            type: 'malzeme',
+        openModal('📦 Proje Gideri / Anlaşma Ekle', getTransactionFormHtml({
+            type: defaultType,
+            allowTypeSelect: true,
             statusLocked: 'bekliyor',
             showDueDate: true,
             showEstimate: true,
@@ -2074,17 +2080,9 @@ const App = (() => {
         }));
     }
 
-    function openIscilik() {
-        if (!currentProjectId) return;
-        openModal('👷 Usta / İşçilik Ödemesi', getTransactionFormHtml({
-            type: 'iscilik',
-            statusLocked: 'bekliyor',
-            showDueDate: true,
-            showEstimate: true,
-            submitLabel: 'Kaydet',
-            submitClass: 'btn-primary'
-        }));
-    }
+    function openMalzeme() { openGider('malzeme'); }
+    function openIscilik() { openGider('iscilik'); }
+    function openTaseron() { openGider('iscilik-malzeme'); }
 
     function openOfisSabit() {
         if (!currentProjectId) return;
@@ -2273,7 +2271,19 @@ const App = (() => {
         }
     }
 
-    function getTransactionFormHtml({ type, statusLocked, showDueDate, showEstimate, submitLabel = 'Kaydet', submitClass = 'btn-primary' }) {
+    function getVendorSuggestions() {
+        const set = new Set();
+        if (data && Array.isArray(data.transactions)) {
+            data.transactions.forEach(t => {
+                if (t.vendor && typeof t.vendor === 'string' && t.vendor.trim()) {
+                    set.add(t.vendor.trim());
+                }
+            });
+        }
+        return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
+    }
+
+    function getTransactionFormHtml({ type, allowTypeSelect, statusLocked, showDueDate, showEstimate, submitLabel = 'Kaydet', submitClass = 'btn-primary' }) {
         const typeInfo = TX_TYPES[type] || {};
 
         const amountLabel = showEstimate ? 'Anlaşılan / Fatura Tutarı (₺) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span>' : 'Tutar (₺)';
@@ -2323,11 +2333,40 @@ const App = (() => {
             `;
         }
 
-        return `
-            <form onsubmit="App.saveTransaction(event, '${type}', '${statusLocked}')">
+        const vendorSuggestions = getVendorSuggestions();
+        const datalistHtml = vendorSuggestions.length > 0 ? `
+            <datalist id="vendor-suggestions-list">
+                ${vendorSuggestions.map(v => `<option value="${escapeHtml(v)}">`).join('')}
+            </datalist>
+        ` : '';
+
+        let typeFieldHtml = '';
+        if (allowTypeSelect || ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'].includes(type)) {
+            typeFieldHtml = `
+                <div class="form-group">
+                    <label class="form-label" for="input-tx-type">İşlem Tipi</label>
+                    <select class="form-select" id="input-tx-type">
+                        <option value="malzeme" ${type === 'malzeme' ? 'selected' : ''}>🧱 Malzeme Ödemesi</option>
+                        <option value="iscilik" ${type === 'iscilik' ? 'selected' : ''}>👷 İşçilik Gideri (Usta)</option>
+                        <option value="iscilik-malzeme" ${type === 'iscilik-malzeme' ? 'selected' : ''}>🛠️ İşçilik + Malzeme (Taşeron)</option>
+                        <option value="ofis-sabit" ${type === 'ofis-sabit' ? 'selected' : ''}>🏢 Ofis Sabit Gideri</option>
+                    </select>
+                </div>`;
+        } else {
+            typeFieldHtml = `
                 <div class="form-group">
                     <label class="form-label">İşlem Tipi</label>
                     <input class="form-input" type="text" value="${typeInfo.label}" disabled>
+                </div>`;
+        }
+
+        return `
+            <form onsubmit="App.saveTransaction(event, '${type}', '${statusLocked}')">
+                ${typeFieldHtml}
+                <div class="form-group">
+                    <label class="form-label" for="input-tx-vendor">Firma / Usta / Taşeron (Alacaklı) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
+                    <input class="form-input" type="text" id="input-tx-vendor" list="vendor-suggestions-list" placeholder="Örn: ABC Yapı, Ahmet Usta, Demir A.Ş." autocomplete="off">
+                    ${datalistHtml}
                 </div>
                 ${periodSelectHtml}
                 ${showEstimate ? `
@@ -2348,11 +2387,7 @@ const App = (() => {
                 ` : ''}
                 <div class="form-group">
                     <label class="form-label" for="input-tx-description">Açıklama</label>
-                    <input class="form-input" type="text" id="input-tx-description" placeholder="Kısa açıklama...">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Ödeme Durumu</label>
-                    <input class="form-input" type="text" value="${STATUS_LABELS[statusLocked]}" disabled>
+                    <input class="form-input" type="text" id="input-tx-description" placeholder="Kısa açıklama (ör: mutfak dolabı montajı)...">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-outline" onclick="App.closeModal()">İptal</button>
@@ -2361,12 +2396,18 @@ const App = (() => {
             </form>`;
     }
 
-    function saveTransaction(e, type, statusLocked) {
+    function saveTransaction(e, defaultType, statusLocked) {
         e.preventDefault();
         if (!currentProjectId) return;
 
+        const typeEl = document.getElementById('input-tx-type');
+        const type = (typeEl && typeEl.value) ? typeEl.value : defaultType;
+
         const amount = parseAmountInput(document.getElementById('input-tx-amount'));
         const estimatedAmount = parseAmountInput(document.getElementById('input-tx-estimated'));
+
+        const vendorEl = document.getElementById('input-tx-vendor');
+        const vendor = vendorEl ? vendorEl.value.trim() : '';
 
         const description = document.getElementById('input-tx-description').value;
         const dueDateEl = document.getElementById('input-tx-due-date');
@@ -2386,7 +2427,7 @@ const App = (() => {
             return;
         }
 
-        addTransaction(type, currentProjectId, amount, statusLocked, dueDate, description, estimatedAmount, period);
+        addTransaction(type, currentProjectId, amount, statusLocked, dueDate, description, estimatedAmount, period, vendor);
 
         const typeInfo = TX_TYPES[type] || {};
         showToast(`${typeInfo.label} kaydedildi!`, 'success');
@@ -2445,7 +2486,8 @@ const App = (() => {
 
         const html = `
             <div class="import-info" style="margin-bottom: 10px;">
-                💳 <strong>${escapeHtml(tx.description || typeInfo.label)}</strong><br>
+                💳 <strong>${escapeHtml(tx.description || typeInfo.label)}</strong>
+                ${tx.vendor ? `<span style="font-size:0.8rem; font-weight:700; color:var(--accent); background:rgba(99,102,241,0.15); padding:2px 8px; border-radius:4px; margin-left:6px;">🏢 ${escapeHtml(tx.vendor)}</span>` : ''}<br>
                 <span style="font-size:0.82rem; color:var(--text-muted);">Vade: ${formattedDate} · 👤 ${escapeHtml(tx.createdBy || 'Bilinmiyor')}</span>
             </div>
             ${summaryHtml}
@@ -3541,8 +3583,8 @@ const App = (() => {
         if (!tx) return;
 
         const typeInfo = TX_TYPES[tx.type] || {};
-        const isExpense = ['malzeme', 'iscilik', 'ofis-sabit'].includes(tx.type);
-        const showEstimateField = ['malzeme', 'iscilik'].includes(tx.type);
+        const isExpense = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'].includes(tx.type);
+        const showEstimateField = ['malzeme', 'iscilik', 'iscilik-malzeme'].includes(tx.type);
         const estimatedValFormatted = tx.estimatedAmount > 0 ? tx.estimatedAmount.toLocaleString('tr-TR') : '';
         const amountValFormatted = tx.amount > 0 ? tx.amount.toLocaleString('tr-TR') : '';
         const statusOdendi = tx.paymentStatus === 'odendi' ? 'selected' : '';
@@ -3570,6 +3612,13 @@ const App = (() => {
             `;
         }
 
+        const vendorSuggestions = getVendorSuggestions();
+        const datalistHtml = vendorSuggestions.length > 0 ? `
+            <datalist id="vendor-suggestions-list">
+                ${vendorSuggestions.map(v => `<option value="${escapeHtml(v)}">`).join('')}
+            </datalist>
+        ` : '';
+
         // Type options
         const isLoan = ['borc-ver', 'borc-al'].includes(tx.type);
         let typeSelectHtml = '';
@@ -3579,8 +3628,9 @@ const App = (() => {
             typeSelectHtml = `
                 <select class="form-select" id="input-tx-type">
                     <option value="malzeme" ${tx.type === 'malzeme' ? 'selected' : ''}>🧱 Malzeme Ödemesi</option>
-                    <option value="iscilik" ${tx.type === 'iscilik' ? 'selected' : ''}>👷 İşçilik Gideri</option>
-                    <option value="hakedis" ${tx.type === 'hakedis' ? 'selected' : ''}>💰 Ara Ödeme (Hakediş)</option>
+                    <option value="iscilik" ${tx.type === 'iscilik' ? 'selected' : ''}>👷 İşçilik Gideri (Usta)</option>
+                    <option value="iscilik-malzeme" ${tx.type === 'iscilik-malzeme' ? 'selected' : ''}>🛠️ İşçilik + Malzeme (Taşeron)</option>
+                    <option value="hakedis" ${tx.type === 'hakedis' ? 'selected' : ''}>💰 Müşteri Ödemesi</option>
                     <option value="ofis-sabit" ${tx.type === 'ofis-sabit' ? 'selected' : ''}>🏢 Ofis Sabit Gideri</option>
                 </select>`;
         }
@@ -3590,6 +3640,11 @@ const App = (() => {
                 <div class="form-group">
                     <label class="form-label" for="input-tx-type">İşlem Tipi</label>
                     ${typeSelectHtml}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="input-tx-vendor">Firma / Usta / Taşeron (Alacaklı) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span></label>
+                    <input class="form-input" type="text" id="input-tx-vendor" list="vendor-suggestions-list" value="${escapeHtml(tx.vendor || '')}" autocomplete="off">
+                    ${datalistHtml}
                 </div>
                 ${periodSelectHtml}
                 ${showEstimateField ? `
@@ -3654,6 +3709,8 @@ const App = (() => {
 
         tx.amount = amount;
         tx.description = document.getElementById('input-tx-description').value.trim();
+        const vendorEl = document.getElementById('input-tx-vendor');
+        tx.vendor = vendorEl ? vendorEl.value.trim() : '';
         tx.dueDate = document.getElementById('input-tx-due-date').value || '';
         tx.paymentStatus = document.getElementById('input-tx-status').value;
 
@@ -3742,8 +3799,10 @@ const App = (() => {
         onTxPeriodSelectChange,
         handleOverlayClick,
         openHakedis,
+        openGider,
         openMalzeme,
         openIscilik,
+        openTaseron,
         openOfisSabit,
         openBorcTransfer,
         saveBorcTransfer,
