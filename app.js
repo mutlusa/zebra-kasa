@@ -13,7 +13,7 @@ const App = (() => {
     const RISK_DAYS = 30;
 
     const TX_TYPES = {
-        hakedis:    { label: 'Ara Ödeme (Hakediş)', icon: '💰', direction: 'income',  cssClass: 'income' },
+        hakedis:    { label: 'Müşteri Ödemesi',     icon: '💰', direction: 'income',  cssClass: 'income' },
         malzeme:    { label: 'Malzeme Ödemesi',     icon: '🧱', direction: 'expense', cssClass: 'expense' },
         iscilik:    { label: 'İşçilik Gideri',      icon: '👷', direction: 'expense', cssClass: 'expense' },
         'ofis-sabit': { label: 'Ofis Sabit Gideri', icon: '🏢', direction: 'expense', cssClass: 'ofis' },
@@ -2053,7 +2053,7 @@ const App = (() => {
 
     function openHakedis() {
         if (!currentProjectId) return;
-        openModal('💰 Ara Ödeme (Hakediş) Tahsil Et', getTransactionFormHtml({
+        openModal('💰 Müşteri Ödemesi Tahsil Et', getTransactionFormHtml({
             type: 'hakedis',
             statusLocked: 'odendi',
             showDueDate: false,
@@ -2253,8 +2253,27 @@ const App = (() => {
         renderProjectDetail(currentProjectId);
     }
 
-    function getTransactionFormHtml(opts) {
-        const { type, statusLocked, showDueDate, showEstimate, submitLabel, submitClass } = opts;
+    function onTxPeriodSelectChange(selectEl) {
+        const periodNum = parseInt(selectEl?.value, 10) || 0;
+        if (periodNum > 0 && currentProjectId) {
+            const project = getProject(currentProjectId);
+            if (project && project.periods) {
+                const pObj = project.periods.find(p => p.number === periodNum);
+                if (pObj && pObj.amount > 0) {
+                    const collected = data.transactions
+                        .filter(t => t.projectId === currentProjectId && t.type === 'hakedis' && t.period === periodNum && t.paymentStatus === 'odendi')
+                        .reduce((s, t) => s + t.amount, 0);
+                    const remaining = Math.max(0, pObj.amount - collected);
+                    const amtInput = document.getElementById('input-tx-amount');
+                    if (amtInput) {
+                        amtInput.value = (remaining > 0 ? remaining : pObj.amount).toLocaleString('tr-TR');
+                    }
+                }
+            }
+        }
+    }
+
+    function getTransactionFormHtml({ type, statusLocked, showDueDate, showEstimate, submitLabel = 'Kaydet', submitClass = 'btn-primary' }) {
         const typeInfo = TX_TYPES[type] || {};
 
         const amountLabel = showEstimate ? 'Anlaşılan / Fatura Tutarı (₺) <span style="font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0;">— opsiyonel</span>' : 'Tutar (₺)';
@@ -2263,16 +2282,41 @@ const App = (() => {
 
         const project = getProject(currentProjectId);
         let periodSelectHtml = '';
+        let initialAmountStr = '';
+
         if (project && project.periods && project.periods.length > 0) {
+            let defaultPeriodNum = 0;
+
+            if (type === 'hakedis') {
+                // Find first uncollected period
+                for (const p of project.periods) {
+                    const collected = data.transactions
+                        .filter(t => t.projectId === currentProjectId && t.type === 'hakedis' && t.period === p.number && t.paymentStatus === 'odendi')
+                        .reduce((sum, t) => sum + t.amount, 0);
+                    if (p.amount > collected) {
+                        defaultPeriodNum = p.number;
+                        const rem = p.amount - collected;
+                        initialAmountStr = rem.toLocaleString('tr-TR');
+                        break;
+                    }
+                }
+                // Fallback to first period if all collected
+                if (defaultPeriodNum === 0 && project.periods.length > 0) {
+                    defaultPeriodNum = project.periods[0].number;
+                    initialAmountStr = project.periods[0].amount ? project.periods[0].amount.toLocaleString('tr-TR') : '';
+                }
+            }
+
             const options = project.periods.map(p => {
-                return `<option value="${p.number}">${escapeHtml(p.label)} (${formatCurrency(p.amount)})</option>`;
+                const isSel = (p.number === defaultPeriodNum) ? 'selected' : '';
+                return `<option value="${p.number}" ${isSel}>${escapeHtml(p.label)} (${formatCurrency(p.amount)})</option>`;
             }).join('');
-            
+
             periodSelectHtml = `
                 <div class="form-group">
                     <label class="form-label" for="input-tx-period">Ödeme Dönemi</label>
-                    <select class="form-select" id="input-tx-period">
-                        <option value="0">Dönem Atanmamış</option>
+                    <select class="form-select" id="input-tx-period" onchange="App.onTxPeriodSelectChange(this)">
+                        <option value="0" ${defaultPeriodNum === 0 ? 'selected' : ''}>Dönem Atanmamış</option>
                         ${options}
                     </select>
                 </div>
@@ -2294,7 +2338,7 @@ const App = (() => {
                 ` : ''}
                 <div class="form-group">
                     <label class="form-label" for="input-tx-amount">${amountLabel}</label>
-                    <input class="form-input" type="text" inputmode="numeric" id="input-tx-amount" placeholder="0" ${requiredAttr} autofocus oninput="App.formatAmountInput(this)">
+                    <input class="form-input" type="text" inputmode="numeric" id="input-tx-amount" value="${initialAmountStr}" placeholder="0" ${requiredAttr} autofocus oninput="App.formatAmountInput(this)">
                 </div>
                 ${showDueDate ? `
                 <div class="form-group" id="group-due-date">
@@ -3697,6 +3741,7 @@ const App = (() => {
         onAmountKeyDown,
         onPayAmountInput,
         onPayModeChange,
+        onTxPeriodSelectChange,
         handleOverlayClick,
         openHakedis,
         openMalzeme,
