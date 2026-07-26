@@ -3223,7 +3223,7 @@ const App = (() => {
                 <div class="form-group" style="flex:1; margin-bottom:0">
                     <label class="form-label">Ödeme Dönemi</label>
                     <select class="form-select" id="import-tx-period">
-                        <option value="0">Dönem Atanmamış</option>
+                        <option value="0">Dönem Atanmamış (Vade Yoksa: İş Bitimi)</option>
                         ${options}
                     </select>
                 </div>
@@ -3252,7 +3252,7 @@ const App = (() => {
                         <label class="form-label">İşlem Tipi</label>
                         <select class="form-select" id="import-tx-type">
                             <option value="auto" selected>✨ Otomatik Algıla (İşçilik & Malzeme Karma)</option>
-                            <option value="malzeme">Tüm Satırlar: Malzeme Gideri</option>
+                            <option value="malzeme">Tüm Satırlar: Malzeme Ödemesi</option>
                             <option value="iscilik">Tüm Satırlar: İşçilik Gideri</option>
                             <option value="ofis-sabit">Tüm Satırlar: Ofis Sabit Gideri</option>
                         </select>
@@ -3267,7 +3267,7 @@ const App = (() => {
                 </div>
                 <div class="import-mapping-row" style="margin-top:10px;">
                     <div class="form-group" style="flex:1; margin-bottom:0">
-                        <label class="form-label">Varsayılan Vade</label>
+                        <label class="form-label">Varsayılan Vade <span style="font-weight:400; color:var(--text-muted); text-transform:none;">(Boşsa: İş Bitimi)</span></label>
                         <input class="form-input" type="date" id="import-due-date" value="">
                     </div>
                     ${periodSelectHtml}
@@ -3321,6 +3321,34 @@ const App = (() => {
         const periodEl = document.getElementById('import-tx-period');
         const period = periodEl ? parseInt(periodEl.value) || 0 : 0;
 
+        // Resolve İş Bitimi (completion period) fallback if no explicit period or dueDate is provided
+        const project = getProject(currentProjectId);
+        let completionPeriodNum = 0;
+        let completionDate = '';
+
+        if (project) {
+            if (project.periods && project.periods.length > 0) {
+                const compP = project.periods.find(p => p.isCompletion || p.number === (project.periodCount + 1)) || project.periods[project.periods.length - 1];
+                if (compP) {
+                    completionPeriodNum = compP.number;
+                    completionDate = compP.date || '';
+                }
+            } else {
+                completionPeriodNum = (project.periodCount || 1) + 1;
+            }
+        }
+
+        let defaultPeriod = period;
+        let defaultDueDate = dueDate;
+
+        // If no explicit dueDate and period is unassigned (0), default to İş Bitimi (completion period)
+        if (!defaultDueDate && defaultPeriod === 0 && completionPeriodNum > 0) {
+            defaultPeriod = completionPeriodNum;
+            if (completionDate) {
+                defaultDueDate = completionDate;
+            }
+        }
+
         let importCount = 0;
         let totalImported = 0;
         let labourCount = 0;
@@ -3345,10 +3373,10 @@ const App = (() => {
 
             if (costMode === 'estimated') {
                 // Pure estimate
-                addTransaction(rowType, currentProjectId, 0, 'bekliyor', dueDate, desc, parsedVal, period);
+                addTransaction(rowType, currentProjectId, 0, 'bekliyor', defaultDueDate, desc, parsedVal, defaultPeriod);
             } else {
                 // Default: Agreed/Actual cost — amount gets parsedVal directly!
-                addTransaction(rowType, currentProjectId, parsedVal, 'bekliyor', dueDate, desc, parsedVal, period);
+                addTransaction(rowType, currentProjectId, parsedVal, 'bekliyor', defaultDueDate, desc, parsedVal, defaultPeriod);
             }
 
             importCount++;
