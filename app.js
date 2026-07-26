@@ -1596,8 +1596,7 @@ const App = (() => {
         const amount = project ? (project.contractAmount ? project.contractAmount.toLocaleString('tr-TR') : '') : '';
         const statusDevam = (!project || project.status === 'devam-ediyor') ? 'selected' : '';
         const statusTamam = (project && project.status === 'tamamlandi') ? 'selected' : '';
-        const periodCount = project ? (project.periodCount !== undefined ? project.periodCount : 4) : 4;
-        const completionAmount = project ? (project.completionAmount ? project.completionAmount.toLocaleString('tr-TR') : '') : '';
+        const periodCount = project ? (project.periodCount !== undefined ? project.periodCount : 0) : 0;
         const editId = project ? project.id : '';
 
         return `
@@ -1625,19 +1624,13 @@ const App = (() => {
                     <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
                         <button type="button" class="btn btn-xs btn-outline" onclick="App.setPaymentPreset('upfront')" title="%100 Tutar işe başlarken Peşinat olarak tahsil edilir">⚡ %100 Peşin (İşe Başlarken)</button>
                         <button type="button" class="btn btn-xs btn-outline" onclick="App.setPaymentPreset('completion')" title="%100 Tutar iş tesliminde/bitiminde tahsil edilir">🏁 %100 Teslimde (İş Bitiminde)</button>
-                        <button type="button" class="btn btn-xs btn-outline" onclick="App.setPaymentPreset('standard')" title="Tutar 4 eşit döneme bölünür">📊 4 Eşit Hakediş</button>
+                        <button type="button" class="btn btn-xs btn-outline" onclick="App.setPaymentPreset('standard')" title="Tutar 4 eşit ara ödemeye bölünür">📊 4 Eşit Ara Ödeme</button>
                     </div>
                 </div>
 
-                <div class="form-group-row" style="display: flex; gap: 12px; margin-bottom: 15px;">
-                    <div style="flex: 1;">
-                        <label class="form-label" for="input-period-count">Hakediş Ödeme Sayısı <span style="font-weight:400; color:var(--text-muted); text-transform:none;">(0 = Tek Ödeme)</span></label>
-                        <input class="form-input" type="number" id="input-period-count" value="${periodCount}" min="0" max="24" required oninput="App.onPeriodCountInput()">
-                    </div>
-                    <div style="flex: 1;">
-                        <label class="form-label" for="input-completion-amount">İş Bitimi Ödemesi (₺)</label>
-                        <input class="form-input" type="text" inputmode="numeric" id="input-completion-amount" value="${completionAmount}" placeholder="0" required oninput="App.onCompletionAmountInput(this)" onkeydown="App.onAmountKeyDown(event)">
-                    </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label" for="input-period-count">Ara Ödeme (Hakediş) Sayısı <span style="font-weight:400; color:var(--text-muted); text-transform:none;">(0 = Ara Ödemesiz)</span></label>
+                    <input class="form-input" type="number" id="input-period-count" value="${periodCount}" min="0" max="24" required oninput="App.onPeriodCountInput()">
                 </div>
 
                 <div class="form-group">
@@ -1645,7 +1638,7 @@ const App = (() => {
                         <label class="form-label" style="margin-bottom:0;">Dönem Detayları</label>
                         <button type="button" class="btn btn-xs btn-outline" onclick="App.distributePeriodsEvenly()">Eşit Dağıt</button>
                     </div>
-                    <div id="project-periods-list" style="max-height: 250px; overflow-y: auto; padding-right: 4px; border: 1px solid var(--glass-border); padding: 10px; border-radius: var(--radius-sm); background: rgba(255,255,255,0.01);">
+                    <div id="project-periods-list" style="max-height: 280px; overflow-y: auto; padding-right: 4px; border: 1px solid var(--glass-border); padding: 10px; border-radius: var(--radius-sm); background: rgba(255,255,255,0.01);">
                         <!-- generatePeriodFields tarafından doldurulur -->
                     </div>
                     <div id="period-sum-validation" style="margin-top: 6px; text-align: right;"></div>
@@ -1661,31 +1654,35 @@ const App = (() => {
     function setPaymentPreset(presetType) {
         const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
         const periodCountInput = document.getElementById('input-period-count');
-        const completionInput = document.getElementById('input-completion-amount');
-        if (!periodCountInput || !completionInput) return;
+        if (!periodCountInput) return;
 
         if (presetType === 'upfront') {
-            periodCountInput.value = 1;
-            completionInput.value = '0';
+            periodCountInput.value = 0;
             generatePeriodFields();
-
-            const amtInputs = document.querySelectorAll('.input-period-amount');
-            if (amtInputs.length > 0) {
-                amtInputs[0].value = contractAmt ? contractAmt.toLocaleString('tr-TR') : '0';
-            }
+            const downInput = document.getElementById('input-downpayment-amount');
+            const compInput = document.getElementById('input-completion-amount');
+            if (downInput) downInput.value = contractAmt ? contractAmt.toLocaleString('tr-TR') : '0';
+            if (compInput) compInput.value = '0';
             validatePeriodSum();
             showToast('Ödeme planı %100 Peşin (İşe Başlarken) olarak ayarlandı.', 'info');
         } else if (presetType === 'completion') {
             periodCountInput.value = 0;
-            completionInput.value = contractAmt ? contractAmt.toLocaleString('tr-TR') : '0';
             generatePeriodFields();
+            const downInput = document.getElementById('input-downpayment-amount');
+            const compInput = document.getElementById('input-completion-amount');
+            if (downInput) downInput.value = '0';
+            if (compInput) compInput.value = contractAmt ? contractAmt.toLocaleString('tr-TR') : '0';
+            validatePeriodSum();
             showToast('Ödeme planı %100 Teslimde (İş Bitiminde) olarak ayarlandı.', 'info');
         } else if (presetType === 'standard') {
             periodCountInput.value = 4;
-            completionInput.value = '0';
             generatePeriodFields();
+            const downInput = document.getElementById('input-downpayment-amount');
+            const compInput = document.getElementById('input-completion-amount');
+            if (downInput) downInput.value = '0';
+            if (compInput) compInput.value = '0';
             distributePeriodsEvenly();
-            showToast('Ödeme planı 4 Eşit Hakediş olarak ayarlandı.', 'info');
+            showToast('Ödeme planı 4 Eşit Ara Ödeme olarak ayarlandı.', 'info');
         }
 
         saveProjectDraft();
@@ -1693,31 +1690,55 @@ const App = (() => {
 
     function onContractAmountInput(el) {
         formatAmountInput(el);
-        const count = parseInt(document.getElementById('input-period-count')?.value, 10);
-        const completionInput = document.getElementById('input-completion-amount');
-        if (count === 0 && completionInput) {
-            completionInput.value = el.value;
+        const contractAmt = parseAmountInput(el);
+        const count = parseInt(document.getElementById('input-period-count')?.value, 10) || 0;
+        if (count === 0) {
+            const downInput = document.getElementById('input-downpayment-amount');
+            const compInput = document.getElementById('input-completion-amount');
+            if (downInput && compInput) {
+                const downVal = parseAmountInput(downInput);
+                if (downVal === 0) {
+                    compInput.value = contractAmt > 0 ? contractAmt.toLocaleString('tr-TR') : '0';
+                } else {
+                    compInput.value = Math.max(0, contractAmt - downVal).toLocaleString('tr-TR');
+                }
+            }
         }
         generatePeriodFields();
+        saveProjectDraft();
+    }
+
+    function onDownpaymentAmountInput(el) {
+        formatAmountInput(el);
+        const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
+        const downAmt = parseAmountInput(el);
+        const count = parseInt(document.getElementById('input-period-count')?.value, 10) || 0;
+        if (count === 0) {
+            const compInput = document.getElementById('input-completion-amount');
+            if (compInput) {
+                compInput.value = Math.max(0, contractAmt - downAmt).toLocaleString('tr-TR');
+            }
+        }
+        validatePeriodSum();
         saveProjectDraft();
     }
 
     function onCompletionAmountInput(el) {
         formatAmountInput(el);
-        generatePeriodFields();
+        const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
+        const compAmt = parseAmountInput(el);
+        const count = parseInt(document.getElementById('input-period-count')?.value, 10) || 0;
+        if (count === 0) {
+            const downInput = document.getElementById('input-downpayment-amount');
+            if (downInput) {
+                downInput.value = Math.max(0, contractAmt - compAmt).toLocaleString('tr-TR');
+            }
+        }
+        validatePeriodSum();
         saveProjectDraft();
     }
 
     function onPeriodCountInput() {
-        const periodCountInput = document.getElementById('input-period-count');
-        const count = parseInt(periodCountInput?.value, 10);
-        const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
-        const completionInput = document.getElementById('input-completion-amount');
-
-        if (count === 0 && contractAmt > 0 && completionInput) {
-            completionInput.value = contractAmt.toLocaleString('tr-TR');
-        }
-
         generatePeriodFields();
         saveProjectDraft();
     }
@@ -1735,59 +1756,75 @@ const App = (() => {
         const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
         const periodCountVal = document.getElementById('input-period-count')?.value;
         const periodCount = periodCountVal !== undefined && periodCountVal !== '' ? (parseInt(periodCountVal, 10) || 0) : 0;
-        let completionAmt = parseAmountInput(document.getElementById('input-completion-amount'));
 
-        // If 0 hakediş is selected and completion amount is 0, auto fill 100% contract amount
-        if (periodCount === 0 && completionAmt === 0 && contractAmt > 0) {
-            completionAmt = contractAmt;
-            const compInput = document.getElementById('input-completion-amount');
-            if (compInput) compInput.value = contractAmt.toLocaleString('tr-TR');
+        let downpaymentAmt = parseAmountInput(document.getElementById('input-downpayment-amount'));
+        let downpaymentDate = document.getElementById('input-downpayment-date')?.value || '';
+        let completionAmt = parseAmountInput(document.getElementById('input-completion-amount'));
+        let completionDate = document.getElementById('input-completion-date')?.value || '';
+
+        if (existingPeriods && existingPeriods.length > 0) {
+            const dpObj = existingPeriods.find(p => p.isDownpayment);
+            if (dpObj) {
+                downpaymentAmt = dpObj.amount || 0;
+                downpaymentDate = dpObj.date || '';
+            }
+            const compObj = existingPeriods.find(p => p.isCompletion);
+            if (compObj) {
+                completionAmt = compObj.amount || 0;
+                completionDate = compObj.date || '';
+            }
         }
 
-        const displayComp = document.getElementById('input-completion-display-amount');
-        if (displayComp) displayComp.value = completionAmt ? completionAmt.toLocaleString('tr-TR') : '0';
+        // If periodCount === 0 and both downpayment & completion amounts are 0, set completionAmt = contractAmt
+        if (periodCount === 0 && downpaymentAmt === 0 && completionAmt === 0 && contractAmt > 0) {
+            completionAmt = contractAmt;
+        }
 
-        const remaining = Math.max(0, contractAmt - completionAmt);
-        const autoAmt = periodCount > 0 ? Math.round(remaining / periodCount) : 0;
+        const remainingForIntermediate = Math.max(0, contractAmt - downpaymentAmt - completionAmt);
+        const autoAmt = periodCount > 0 ? Math.round(remainingForIntermediate / periodCount) : 0;
 
         let html = '';
-        if (periodCount === 0) {
-            html += `
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px; padding:8px 10px; background:rgba(255,255,255,0.03); border-radius:var(--radius-sm); border: 1px dashed var(--glass-border);">
-                    💡 <strong>0 Hakediş Seçildi:</strong> Ara hakediş ödemesi yapılmayacaktır. Tüm sözleşme bedeli (100%) iş bitiminde tek ödeme olarak tahsil edilir.
-                </div>
-            `;
-        }
 
+        // 1. Peşinat Row
+        html += `
+            <div class="form-group-row" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center; background: rgba(16, 185, 129, 0.04); padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid rgba(16, 185, 129, 0.15);">
+                <div style="flex: 1.2; font-size: 0.8rem; font-weight: 700; color: var(--success);">⚡ Peşinat (İşe Başlarken)</div>
+                <input type="text" inputmode="numeric" class="form-input" id="input-downpayment-amount" value="${downpaymentAmt ? downpaymentAmt.toLocaleString('tr-TR') : '0'}" placeholder="Tutar" style="flex: 2; margin-bottom:0;" oninput="App.onDownpaymentAmountInput(this)" onkeydown="App.onAmountKeyDown(event)">
+                <input type="date" class="form-input" id="input-downpayment-date" value="${downpaymentDate}" style="flex: 2; margin-bottom:0;" onchange="App.saveProjectDraft()">
+            </div>
+        `;
+
+        // 2. Intermediate Ara Ödemeler Rows
         for (let i = 0; i < periodCount; i++) {
-            const num = i + 1;
+            let labelText = periodCount === 1 ? 'Ara Ödeme (Hakediş)' : `${i + 1}. Ara Ödeme (Hakediş)`;
             let val = autoAmt;
             let date = '';
 
-            if (existingPeriods && existingPeriods[i]) {
-                val = existingPeriods[i].amount;
-                date = existingPeriods[i].date || '';
+            if (existingPeriods) {
+                const interPeriods = existingPeriods.filter(p => !p.isDownpayment && !p.isCompletion);
+                if (interPeriods[i]) {
+                    val = interPeriods[i].amount;
+                    date = interPeriods[i].date || '';
+                }
             }
 
             const valFormatted = val ? val.toLocaleString('tr-TR') : '';
 
             html += `
-                <div class="form-group-row" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center;">
-                    <div style="flex: 1; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${num}. Hakediş</div>
+                <div class="form-group-row" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center; padding-left: 4px;">
+                    <div style="flex: 1.2; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${labelText}</div>
                     <input type="text" inputmode="numeric" class="form-input input-period-amount" data-index="${i}" value="${valFormatted}" placeholder="Tutar" style="flex: 2; margin-bottom:0;" oninput="App.onPeriodAmountInput(this)">
                     <input type="date" class="form-input input-period-date" data-index="${i}" value="${date}" style="flex: 2; margin-bottom:0;" onchange="App.saveProjectDraft()">
                 </div>
             `;
         }
 
-        // Add final completion period info
-        const compDateIdx = periodCount > 0 ? periodCount : 0;
-        const compDate = existingPeriods && existingPeriods[compDateIdx] ? existingPeriods[compDateIdx].date || '' : '';
+        // 3. İş Bitimi Row
         html += `
-            <div class="form-group-row" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center; border-top: 1px dashed var(--glass-border); padding-top: 8px; margin-top: 8px;">
-                <div style="flex: 1; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${periodCount === 0 ? 'İş Bitimi (Tek Ödeme)' : 'İş Bitimi'}</div>
-                <input type="text" class="form-input" id="input-completion-display-amount" value="${completionAmt ? completionAmt.toLocaleString('tr-TR') : '0'}" disabled style="flex: 2; margin-bottom:0;">
-                <input type="date" class="form-input" id="input-completion-date" value="${compDate}" style="flex: 2; margin-bottom:0;" onchange="App.saveProjectDraft()">
+            <div class="form-group-row" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center; background: rgba(99, 102, 241, 0.04); padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid rgba(99, 102, 241, 0.15); margin-top: 4px;">
+                <div style="flex: 1.2; font-size: 0.8rem; font-weight: 700; color: var(--accent);">🏁 İş Bitimi Ödemesi</div>
+                <input type="text" inputmode="numeric" class="form-input" id="input-completion-amount" value="${completionAmt ? completionAmt.toLocaleString('tr-TR') : '0'}" placeholder="Tutar" style="flex: 2; margin-bottom:0;" oninput="App.onCompletionAmountInput(this)" onkeydown="App.onAmountKeyDown(event)">
+                <input type="date" class="form-input" id="input-completion-date" value="${completionDate}" style="flex: 2; margin-bottom:0;" onchange="App.saveProjectDraft()">
             </div>
         `;
 
@@ -1800,9 +1837,10 @@ const App = (() => {
         if (!label) return;
 
         const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
+        const downAmt = parseAmountInput(document.getElementById('input-downpayment-amount'));
         const completionAmt = parseAmountInput(document.getElementById('input-completion-amount'));
 
-        let sum = completionAmt;
+        let sum = downAmt + completionAmt;
         const amtInputs = document.querySelectorAll('.input-period-amount');
         amtInputs.forEach(input => {
             sum += parseAmountInput(input);
@@ -1820,11 +1858,13 @@ const App = (() => {
 
     function distributePeriodsEvenly() {
         const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
-        const periodCountVal = document.getElementById('input-period-count')?.value;
-        const periodCount = periodCountVal !== undefined && periodCountVal !== '' ? (parseInt(periodCountVal, 10) || 0) : 0;
+        const downAmt = parseAmountInput(document.getElementById('input-downpayment-amount'));
         const completionAmt = parseAmountInput(document.getElementById('input-completion-amount'));
 
-        const remaining = Math.max(0, contractAmt - completionAmt);
+        const periodCountVal = document.getElementById('input-period-count')?.value;
+        const periodCount = periodCountVal !== undefined && periodCountVal !== '' ? (parseInt(periodCountVal, 10) || 0) : 0;
+
+        const remaining = Math.max(0, contractAmt - downAmt - completionAmt);
         const autoAmt = periodCount > 0 ? Math.round(remaining / periodCount) : 0;
 
         const amtInputs = document.querySelectorAll('.input-period-amount');
@@ -1853,7 +1893,12 @@ const App = (() => {
         const status = document.getElementById('input-project-status').value;
         const periodCountVal = document.getElementById('input-period-count').value;
         const periodCount = periodCountVal !== '' ? (parseInt(periodCountVal, 10) || 0) : 0;
+
+        const downpaymentAmount = parseAmountInput(document.getElementById('input-downpayment-amount'));
+        const downpaymentDate = document.getElementById('input-downpayment-date')?.value || '';
+
         const completionAmount = parseAmountInput(document.getElementById('input-completion-amount'));
+        const completionDate = document.getElementById('input-completion-date')?.value || '';
 
         if (!name.trim()) {
             showToast('Proje adı boş olamaz.', 'error');
@@ -1862,36 +1907,46 @@ const App = (() => {
 
         // Gather periods data
         const periods = [];
+        let pNum = 1;
+
+        // 1. Peşinat
+        periods.push({
+            number: pNum++,
+            label: 'Peşinat (İşe Başlarken)',
+            amount: downpaymentAmount,
+            date: downpaymentDate,
+            isDownpayment: true
+        });
+
+        // 2. Intermediate Ara Ödemeler
         const amtInputs = document.querySelectorAll('.input-period-amount');
         const dateInputs = document.querySelectorAll('.input-period-date');
+        let intermediateSum = 0;
 
-        let periodSum = 0;
         for (let i = 0; i < periodCount; i++) {
             const amt = parseAmountInput(amtInputs[i]);
             const date = dateInputs[i]?.value || '';
-            periodSum += amt;
+            intermediateSum += amt;
+            const label = periodCount === 1 ? 'Ara Ödeme (Hakediş)' : `${i + 1}. Ara Ödeme (Hakediş)`;
             periods.push({
-                number: i + 1,
-                label: `${i + 1}. Hakediş`,
+                number: pNum++,
+                label: label,
                 amount: amt,
                 date: date
             });
         }
 
-        // Add the completion period as the last item
-        const completionDate = document.getElementById('input-completion-date')?.value || '';
-        const compPeriodNumber = periodCount > 0 ? periodCount + 1 : 1;
-        const compPeriodLabel = periodCount > 0 ? 'İş Bitimi' : 'İş Bitimi (Tek Ödeme)';
-
+        // 3. İş Bitimi
         periods.push({
-            number: compPeriodNumber,
-            label: compPeriodLabel,
+            number: pNum++,
+            label: 'İş Bitimi Ödemesi',
             amount: completionAmount,
             date: completionDate,
             isCompletion: true
         });
 
-        if (Math.abs(contractAmount - (periodSum + completionAmount)) > 1) {
+        const totalPlanned = downpaymentAmount + intermediateSum + completionAmount;
+        if (Math.abs(contractAmount - totalPlanned) > 1) {
             showToast('Dönem tutarlarının toplamı sözleşme bedeli ile eşleşmelidir.', 'error');
             return;
         }
@@ -3593,6 +3648,7 @@ const App = (() => {
         cancelProjectForm,
         setPaymentPreset,
         onContractAmountInput,
+        onDownpaymentAmountInput,
         onCompletionAmountInput,
         onPeriodCountInput,
         onPeriodAmountInput,
