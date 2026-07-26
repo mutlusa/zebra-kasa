@@ -1605,8 +1605,9 @@ const App = (() => {
         let periodCount = 0;
         if (project) {
             if (project.periods && Array.isArray(project.periods)) {
-                const inters = project.periods.filter(p => !p.isDownpayment && !p.isCompletion);
-                periodCount = inters.length;
+                // Only count intermediate periods that actually have an amount > 0 or a date set
+                const activeInters = project.periods.filter(p => !p.isDownpayment && !p.isCompletion && (p.amount > 0 || (p.date && p.date.trim() !== '')));
+                periodCount = activeInters.length;
             } else if (project.periodCount !== undefined && project.periodCount !== null) {
                 periodCount = parseInt(project.periodCount, 10) || 0;
             }
@@ -1768,8 +1769,16 @@ const App = (() => {
         if (!container) return;
 
         const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
-        const periodCountVal = document.getElementById('input-period-count')?.value;
-        const periodCount = periodCountVal !== undefined && periodCountVal !== '' ? (parseInt(periodCountVal, 10) || 0) : 0;
+        let periodCount = 0;
+        if (existingPeriods && Array.isArray(existingPeriods)) {
+            const activeInters = existingPeriods.filter(p => !p.isDownpayment && !p.isCompletion && (p.amount > 0 || (p.date && p.date.trim() !== '')));
+            periodCount = activeInters.length;
+            const countInput = document.getElementById('input-period-count');
+            if (countInput) countInput.value = periodCount;
+        } else {
+            const periodCountVal = document.getElementById('input-period-count')?.value;
+            periodCount = periodCountVal !== undefined && periodCountVal !== '' ? (parseInt(periodCountVal, 10) || 0) : 0;
+        }
 
         let downpaymentAmt = parseAmountInput(document.getElementById('input-downpayment-amount'));
         let downpaymentDate = document.getElementById('input-downpayment-date')?.value || '';
