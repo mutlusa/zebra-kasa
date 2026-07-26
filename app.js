@@ -460,7 +460,9 @@ const App = (() => {
 
     /**
      * Resolves the effective due date for a transaction.
-     * Uses explicit tx.dueDate, or if empty and assigned to a period, resolves period.date.
+     * 1. Uses explicit tx.dueDate if set
+     * 2. If empty and assigned to a period, resolves period.date
+     * 3. If still empty and transaction is pending (bekliyor), falls back to createdAt or today (immediate obligation)
      */
     function getTxDueDate(tx) {
         if (tx.dueDate) return tx.dueDate;
@@ -470,6 +472,9 @@ const App = (() => {
                 const pObj = project.periods.find(p => p.number === tx.period);
                 if (pObj && pObj.date) return pObj.date;
             }
+        }
+        if (tx.paymentStatus === 'bekliyor') {
+            return tx.createdAt ? tx.createdAt.split('T')[0] : todayStr();
         }
         return '';
     }
