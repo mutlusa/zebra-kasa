@@ -240,17 +240,15 @@ const App = (() => {
             // Listen for live updates from other devices / users
             dbRef.on('value', (snapshot) => {
                 const cloudData = snapshot.val();
-                if (cloudData && typeof cloudData === 'object' && Array.isArray(cloudData.projects)) {
+                if (cloudData && typeof cloudData === 'object' && Array.isArray(cloudData.projects) && cloudData.projects.length > 0) {
                     isCloudSyncing = true;
                     data = cloudData;
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
                     isCloudSyncing = false;
-
-                    if (currentProjectId) {
-                        renderProjectDetail(currentProjectId);
-                    } else {
-                        renderDashboard();
-                    }
+                    refreshActiveView();
+                } else if (data.projects && data.projects.length > 0) {
+                    // Cloud room is empty or uninitialized, push our local data to cloud
+                    syncDataToCloud();
                 }
             });
 
