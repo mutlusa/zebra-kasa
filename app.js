@@ -660,9 +660,9 @@ const App = (() => {
             .reduce((sum, t) => sum + getTxRemainingAmount(t), 0);
     }
 
-    /** 30-day risk balance for a project */
+    /** 30-day upcoming expenses for a project */
     function getProject30DayRisk(projectId) {
-        return getProjectBalance(projectId) - getProjectUpcoming30DayExpenses(projectId);
+        return getProjectUpcoming30DayExpenses(projectId);
     }
 
     // ─────────────────────────────────────
@@ -915,9 +915,9 @@ const App = (() => {
         const riskAmount = document.getElementById('dashboard-risk-total');
         const riskLabel = riskCard ? riskCard.querySelector('.risk-label') : null;
         riskAmount.textContent = formatCurrency(totalRisk);
-        riskCard.className = 'risk-card ' + (totalRisk >= 0 ? 'risk-positive' : 'risk-negative pulse-danger');
+        riskCard.className = 'risk-card ' + (totalRisk > 0 ? 'risk-negative pulse-danger' : 'risk-positive');
         if (riskLabel) {
-            riskLabel.textContent = totalRisk >= 0 ? '30 Günlük Tahmini Bakiye — Tüm Projeler' : '30 Günlük Riskli Bakiye — Tüm Projeler';
+            riskLabel.textContent = '30 Günlük Yaklaşan Ödemelerim — Tüm Projeler';
         }
 
         // Stats
@@ -954,7 +954,6 @@ const App = (() => {
             const expense = getProjectExpense(p.id);
             const balance = getProjectBalance(p.id);
             const risk = getProject30DayRisk(p.id);
-            const isSafe = risk >= 0;
 
             return `
                 <div class="project-card" onclick="App.showProject('${p.id}')">
@@ -981,14 +980,14 @@ const App = (() => {
                             <span class="project-card-stat-value ${balance >= 0 ? 'amount-positive' : 'amount-negative'}">${formatCurrency(balance)}</span>
                         </div>
                         <div class="project-card-stat">
-                            <span class="project-card-stat-label">30G Risk</span>
-                            <span class="project-card-stat-value ${isSafe ? 'amount-positive' : 'amount-negative'}">${formatCurrency(risk)}</span>
+                            <span class="project-card-stat-label">30G Ödemeler</span>
+                            <span class="project-card-stat-value ${risk > 0 ? 'amount-negative' : 'amount-positive'}">${formatCurrency(risk)}</span>
                         </div>
                     </div>
                     <div class="project-card-footer">
                         <span class="project-card-risk">
-                            <span class="dot ${isSafe ? 'safe' : 'danger'}"></span>
-                            ${isSafe ? 'Güvende' : 'Darboğaz Riski'}
+                            <span class="dot ${risk > 0 ? 'danger' : 'safe'}"></span>
+                            ${risk > 0 ? 'Yaklaşan ödeme var' : '30 gün içinde ödeme yok'}
                         </span>
                         <span class="project-card-arrow">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
@@ -1114,9 +1113,9 @@ const App = (() => {
         const riskAmount = document.getElementById('detail-risk');
         const riskLabel = riskCard ? riskCard.querySelector('.risk-label') : null;
         riskAmount.textContent = formatCurrency(risk);
-        riskCard.className = 'risk-card compact ' + (risk >= 0 ? 'risk-positive' : 'risk-negative pulse-danger');
+        riskCard.className = 'risk-card compact ' + (risk > 0 ? 'risk-negative pulse-danger' : 'risk-positive');
         if (riskLabel) {
-            riskLabel.textContent = risk >= 0 ? '30 Günlük Tahmini Bakiye' : '30 Günlük Riskli Bakiye';
+            riskLabel.textContent = '30 Günlük Yaklaşan Ödemelerim';
         }
 
         // Müşteri Cari Mutabakat Ekstresi & Kârlılık Analizi
