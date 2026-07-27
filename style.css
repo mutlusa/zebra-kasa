@@ -1230,29 +1230,36 @@ body::before {
 
 /* Dönemsel Renklendirmeler */
 .transaction-item.tx-overdue {
-    border-left: 4px solid var(--danger);
-    background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, var(--bg-card) 100%);
+    border-left: 5px solid var(--danger);
+    background: rgba(239, 68, 68, 0.15);
 }
 .transaction-item.tx-past {
-    border-left: 4px solid #f97316;
-    background: linear-gradient(90deg, rgba(249, 115, 22, 0.05) 0%, var(--bg-card) 100%);
+    border-left: 5px solid #f97316;
+    background: rgba(249, 115, 22, 0.15);
 }
 .transaction-item.tx-current {
-    border-left: 4px solid var(--accent);
-    background: linear-gradient(90deg, rgba(99, 102, 241, 0.05) 0%, var(--bg-card) 100%);
+    border-left: 5px solid var(--accent);
+    background: rgba(99, 102, 241, 0.18);
 }
 .transaction-item.tx-future-1 {
-    border-left: 4px solid #10b981;
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.06) 0%, var(--bg-card) 100%);
+    border-left: 5px solid #10b981;
+    background: rgba(16, 185, 129, 0.15);
 }
 .transaction-item.tx-future-2 {
-    border-left: 4px solid #34d399;
-    background: linear-gradient(90deg, rgba(52, 211, 153, 0.04) 0%, var(--bg-card) 100%);
+    border-left: 5px solid #34d399;
+    background: rgba(16, 185, 129, 0.08);
 }
 .transaction-item.tx-future-3 {
-    border-left: 4px solid #6ee7b7;
-    background: linear-gradient(90deg, rgba(110, 231, 183, 0.02) 0%, var(--bg-card) 100%);
+    border-left: 5px solid #6ee7b7;
+    background: rgba(16, 185, 129, 0.04);
 }
+
+.transaction-item.tx-overdue:hover { background: rgba(239, 68, 68, 0.22); }
+.transaction-item.tx-past:hover { background: rgba(249, 115, 22, 0.22); }
+.transaction-item.tx-current:hover { background: rgba(99, 102, 241, 0.25); }
+.transaction-item.tx-future-1:hover { background: rgba(16, 185, 129, 0.22); }
+.transaction-item.tx-future-2:hover { background: rgba(16, 185, 129, 0.13); }
+.transaction-item.tx-future-3:hover { background: rgba(16, 185, 129, 0.08); }
 
 .transaction-item:hover {
     background: var(--bg-card-hover);
