@@ -1879,7 +1879,7 @@ const App = (() => {
             if (projectDraft) {
                 if (document.getElementById('input-project-name')) document.getElementById('input-project-name').value = projectDraft.name || '';
                 if (document.getElementById('input-contract-amount')) document.getElementById('input-contract-amount').value = projectDraft.contractAmount || '';
-                if (document.getElementById('input-project-status')) document.getElementById('input-project-status').value = projectDraft.status || 'devam-ediyor';
+                if (document.getElementById('input-project-status')) document.getElementById('input-project-status').value = 'hazirlik';
                 if (document.getElementById('input-period-count')) document.getElementById('input-period-count').value = projectDraft.periodCount || '4';
                 if (document.getElementById('input-completion-amount')) document.getElementById('input-completion-amount').value = projectDraft.completionAmount || '';
 
@@ -1945,6 +1945,7 @@ const App = (() => {
                     <label class="form-label" for="input-contract-amount">Toplam Sözleşme Bedeli (₺)</label>
                     <input class="form-input" type="text" inputmode="numeric" id="input-contract-amount" value="${amount}" placeholder="0" required oninput="App.onContractAmountInput(this)" onkeydown="App.onAmountKeyDown(event)">
                 </div>
+                ${project ? `
                 <div class="form-group">
                     <label class="form-label" for="input-project-status" onchange="App.saveProjectDraft()">Aşama / Durum</label>
                     <select class="form-select" id="input-project-status">
@@ -1953,6 +1954,7 @@ const App = (() => {
                         <option value="tamamlandi" ${statusTamam}>✅ Tamamlandı / Teslim Edildi</option>
                     </select>
                 </div>
+                ` : `<input type="hidden" id="input-project-status" value="hazirlik">`}
 
                 <div class="form-group" style="border-top: 1px solid var(--glass-border); padding-top: 15px; margin-top: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
