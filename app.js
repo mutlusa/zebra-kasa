@@ -1699,8 +1699,30 @@ const App = (() => {
             scopeBadge = `<div style="font-size:0.7rem; color:var(--success); margin-top:2px; font-weight:700;">✨ Ek Sözleşme (+${formatCurrency(tx.clientAddonAmount || 0)} Müşteri Alacağı)</div>`;
         }
 
+        // Period Color Logic for Active Debts
+        let periodColorClass = '';
+        if (!isIncome && tx.paymentStatus !== 'odendi' && remaining > 0) {
+            const currentPeriod = getProjectCurrentPeriod(tx.projectId);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const isOverdue = tx.dueDate && new Date(tx.dueDate) < today;
+
+            if (isOverdue) {
+                periodColorClass = 'tx-overdue';
+            } else if (tx.period > currentPeriod) {
+                const diff = tx.period - currentPeriod;
+                if (diff === 1) periodColorClass = 'tx-future-1';
+                else if (diff === 2) periodColorClass = 'tx-future-2';
+                else periodColorClass = 'tx-future-3';
+            } else if (tx.period === currentPeriod || tx.period === 0) {
+                periodColorClass = 'tx-current';
+            } else {
+                periodColorClass = 'tx-past';
+            }
+        }
+
         return `
-            <div class="transaction-item">
+            <div class="transaction-item ${periodColorClass}">
                 <div class="tx-icon ${typeInfo.cssClass || ''}">${workIcon || typeInfo.icon || '📄'}</div>
                 <div class="tx-info">
                     <div class="tx-desc">${descWithIcon}</div>
