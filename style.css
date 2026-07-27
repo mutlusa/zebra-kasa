@@ -158,6 +158,42 @@ body::before {
     padding: 16px 12px;
 }
 
+.sidebar-active-project {
+    margin-top: 14px;
+    padding: 12px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(124, 92, 252, 0.06));
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: var(--radius-sm);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: all 0.2s ease;
+}
+
+.sidebar-active-project .project-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    font-weight: 700;
+    margin-bottom: 3px;
+}
+
+.sidebar-active-project .project-title {
+    font-size: 0.88rem;
+    font-weight: 800;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.sidebar-version-badge {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+}
+
 .nav-item {
     display: flex;
     align-items: center;

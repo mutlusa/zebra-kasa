@@ -571,15 +571,15 @@ const App = (() => {
     // ─────────────────────────────────────
 
     /** Sum of realized income for a project.
-     *  - hakedis: only when paid (odendi)
+     *  - hakedis: actual paid amounts (partial payments included)
      *  - borc-al: ALWAYS (money was received immediately, bekliyor = not yet repaid)
      */
     function getProjectIncome(projectId) {
         return data.transactions
             .filter(t => t.projectId === projectId)
             .reduce((sum, t) => {
-                if (t.type === 'hakedis' && t.paymentStatus === 'odendi') return sum + t.amount;
-                if (t.type === 'borc-al') return sum + t.amount; // Loan received = immediate income
+                if (t.type === 'hakedis') return sum + getTxPaidAmount(t);
+                if (t.type === 'borc-al') return sum + getTxPaidAmount(t); // Loan received = immediate income
                 return sum;
             }, 0);
     }
@@ -649,7 +649,8 @@ const App = (() => {
             .filter(t => {
                 if (t.projectId !== projectId) return false;
                 if (!expenseTypes.includes(t.type)) return false;
-                if (t.paymentStatus !== 'bekliyor') return false;
+                if (t.paymentStatus === 'odendi') return false;
+                if (getTxRemainingAmount(t) <= 0) return false;
                 const dueDateStr = getTxDueDate(t);
                 if (!dueDateStr) return false;
                 const due = new Date(dueDateStr);
@@ -687,34 +688,29 @@ const App = (() => {
             .reduce((sum, t) => sum + t.amount, 0);
     }
 
-    /** Tahmini kâr = sözleşme − tahmini toplam maliyet */
+    /** Tahmini kâr = (ana sözleşme + ilave işler) − tahmini toplam maliyet */
     function getProjectEstimatedProfit(projectId) {
         const project = getProject(projectId);
         if (!project) return 0;
-        return project.contractAmount - getProjectEstimatedCost(projectId);
+        return getProjectContractAmount(projectId) - getProjectEstimatedCost(projectId);
     }
 
-    /** Güncel beklenen kâr = sözleşme − güncel toplam maliyet */
+    /** Güncel beklenen kâr = (ana sözleşme + ilave işler) − güncel toplam maliyet */
     function getProjectCurrentProfit(projectId) {
         const project = getProject(projectId);
         if (!project) return 0;
-        return project.contractAmount - getProjectCurrentCost(projectId);
+        return getProjectContractAmount(projectId) - getProjectCurrentCost(projectId);
     }
 
     // ─────────────────────────────────────
 
     /** Totals across all projects */
     function getTotalIncome() {
-        return data.transactions
-            .filter(t => t.type === 'hakedis' && t.paymentStatus === 'odendi')
-            .reduce((sum, t) => sum + t.amount, 0);
+        return data.projects.reduce((sum, p) => sum + getProjectIncome(p.id), 0);
     }
 
     function getTotalExpense() {
-        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit'];
-        return data.transactions
-            .filter(t => expenseTypes.includes(t.type) && t.paymentStatus === 'odendi')
-            .reduce((sum, t) => sum + t.amount, 0);
+        return data.projects.reduce((sum, p) => sum + getProjectExpense(p.id), 0);
     }
 
     function getTotalBalance() {
@@ -739,7 +735,7 @@ const App = (() => {
         return data.transactions
             .filter(t => {
                 if (!expenseTypes.includes(t.type)) return false;
-                if (t.paymentStatus !== 'bekliyor') return false;
+                if (t.paymentStatus === 'odendi') return false;
                 if (getTxRemainingAmount(t) <= 0) return false; // Fully paid but status not updated
                 const dueDateStr = getTxDueDate(t);
                 if (!dueDateStr) return false;
@@ -866,8 +862,30 @@ const App = (() => {
         if (mainContent) mainContent.scrollTop = 0;
     }
 
+    function updateSidebarActiveProject(projectId) {
+        const card = document.getElementById('sidebar-active-project-card');
+        if (!card) return;
+
+        if (projectId) {
+            const project = getProject(projectId);
+            if (project) {
+                card.innerHTML = `
+                    <div class="project-label">Aktif Proje</div>
+                    <div class="project-title" style="color:#6366f1;" title="${escapeHtml(project.name)}">🏛️ ${escapeHtml(project.name)}</div>
+                `;
+                return;
+            }
+        }
+
+        card.innerHTML = `
+            <div class="project-label">Mevcut Görünüm</div>
+            <div class="project-title" style="color:var(--accent);">📊 Genel Durum (Tüm Projeler)</div>
+        `;
+    }
+
     function showDashboard() {
         currentProjectId = null;
+        updateSidebarActiveProject(null);
         showView('view-dashboard');
         renderDashboard();
         // Update nav active state
@@ -878,6 +896,7 @@ const App = (() => {
 
     function showProject(id) {
         currentProjectId = id;
+        updateSidebarActiveProject(id);
         showView('view-project-detail');
         renderProjectDetail(id);
     }
@@ -1035,6 +1054,8 @@ const App = (() => {
             showDashboard();
             return;
         }
+
+        updateSidebarActiveProject(projectId);
 
         // Header info
         document.getElementById('detail-project-name').textContent = project.name;
@@ -1624,7 +1645,7 @@ const App = (() => {
 
         let scopeBadge = '';
         if (tx.scopeType === 'santiye-ici') {
-            scopeBadge = `<div style="font-size:0.7rem; color:#f59e0b; margin-top:2px; font-weight:700;">🔨 Şantiye İçi Unutulan İş (Tahmini: 0 ₺)</div>`;
+            scopeBadge = `<div style="font-size:0.7rem; color:#f59e0b; margin-top:2px; font-weight:700;">🔨 Şantiye İçi Hesapta Olmayan İş (Tahmini: 0 ₺)</div>`;
         } else if (tx.scopeType === 'ilave-is' || tx.type === 'ilave-is') {
             scopeBadge = `<div style="font-size:0.7rem; color:var(--success); margin-top:2px; font-weight:700;">✨ Ek Sözleşme (+${formatCurrency(tx.clientAddonAmount || 0)} Müşteri Alacağı)</div>`;
         }
@@ -2825,6 +2846,8 @@ const App = (() => {
         renderDashboard();
         if (currentProjectId) {
             renderProjectDetail(currentProjectId);
+        } else {
+            updateSidebarActiveProject(null);
         }
     }
 
@@ -2961,7 +2984,7 @@ const App = (() => {
                     <label class="form-label">Kapsam Türü Seçin</label>
                     <div id="scope-type-selector-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
                         <button type="button" class="btn-scope-type ${activeScope === 'santiye-ici' ? 'active' : ''}" data-scope="santiye-ici" onclick="App.switchScopeType('santiye-ici')" style="padding:10px; font-size:0.8rem; border-radius:8px; display:flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; background:${activeScope === 'santiye-ici' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${activeScope === 'santiye-ici' ? 'var(--accent)' : 'var(--glass-border)'}; color:${activeScope === 'santiye-ici' ? '#ffffff' : 'var(--text-muted)'};">
-                            <span>🔨</span> <span>Şantiye İçi / Unutulan İş</span>
+                            <span>🔨</span> <span>Şantiye İçi / Hesapta Olmayan İş</span>
                         </button>
                         <button type="button" class="btn-scope-type ${activeScope === 'ilave-is' ? 'active' : ''}" data-scope="ilave-is" onclick="App.switchScopeType('ilave-is')" style="padding:10px; font-size:0.8rem; border-radius:8px; display:flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; background:${activeScope === 'ilave-is' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${activeScope === 'ilave-is' ? 'var(--accent)' : 'var(--glass-border)'}; color:${activeScope === 'ilave-is' ? '#ffffff' : 'var(--text-muted)'};">
                             <span>✨</span> <span>Müşteri İlave İşi</span>

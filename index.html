@@ -27,6 +27,10 @@
                 </span>
                 <span>Dashboard</span>
             </a>
+            <div id="sidebar-active-project-card" class="sidebar-active-project">
+                <div class="project-label">Mevcut Görünüm</div>
+                <div class="project-title" style="color:var(--accent);">📊 Genel Durum (Tüm Projeler)</div>
+            </div>
         </nav>
 
         <div class="sidebar-footer">
@@ -48,6 +52,9 @@
                     🟢 Canlı Bulut Senkronize
                 </span>
                 <span style="font-size:0.7rem; color:var(--text-muted);">🔑 PIN</span>
+            </div>
+            <div class="sidebar-version-badge">
+                v1.2.0 · Zebra Kasa Pro
             </div>
             <input type="file" id="file-import-input" accept=".json" style="display:none" onchange="App.importData(event)">
         </div>
