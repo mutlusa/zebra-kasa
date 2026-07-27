@@ -960,7 +960,7 @@ const App = (() => {
                     <div class="project-card-header">
                         <div>
                             <div class="project-card-name">${escapeHtml(p.name)}</div>
-                            <div class="project-card-contract">Sözleşme: ${formatCurrency(p.contractAmount)}</div>
+                            <div class="project-card-contract">Sözleşme: ${formatCurrency(getProjectContractAmount(p.id))}</div>
                         </div>
                         <span class="badge ${p.status === 'tamamlandi' ? 'badge-muted' : 'badge-success'}">
                             ${PROJECT_STATUS[p.status] || p.status}
@@ -2305,21 +2305,22 @@ const App = (() => {
             return;
         }
 
+        let createdProject = null;
         if (editId) {
             updateProject(editId, name, contractAmount, status, periodCount, completionAmount, periods);
             showToast('Proje güncellendi.', 'success');
         } else {
-            addProject(name, contractAmount, status, periodCount, completionAmount, periods);
+            createdProject = addProject(name, contractAmount, status, periodCount, completionAmount, periods);
             projectDraft = null; // Clear draft on successful creation
             showToast('Yeni proje oluşturuldu!', 'success');
         }
 
         closeModal();
 
-        if (currentProjectId) {
-            renderProjectDetail(currentProjectId);
+        if (createdProject) {
+            showProject(createdProject.id);
         } else {
-            renderDashboard();
+            refreshActiveView();
         }
     }
 
