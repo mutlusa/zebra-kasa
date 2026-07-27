@@ -534,7 +534,9 @@ const App = (() => {
             dueDate: dueDate || '',
             description: (description || '').trim(),
             vendor: (vendor || '').trim(),
-            period: (typeof period === 'string' && period.startsWith('ilave-')) ? period : (parseInt(period) || 0),
+            period: (typeof period === 'string' && period.startsWith('ilave-')) 
+                        ? period 
+                        : (parseInt(period) || (dueDate ? assignPeriodByDate(projectId, dueDate) : 0)),
             scopeType: finalScopeType,
             createdBy: currentUser,
             createdAt: new Date().toISOString(),
@@ -605,6 +607,56 @@ const App = (() => {
         return getProjectIncome(projectId) - getProjectExpense(projectId);
     }
 
+    /** 
+     * Determines the "Current Active Period" for a project based on cash flow.
+     * It finds the first period where the expected income has not been fully collected.
+     */
+    function getProjectCurrentPeriod(projectId) {
+        const project = getProject(projectId);
+        if (!project || !project.periods || project.periods.length === 0) return 1;
+
+        const totalIncome = getProjectIncome(projectId);
+        let cumulativeTarget = 0;
+
+        for (const p of project.periods) {
+            cumulativeTarget += (parseFloat(p.amount) || 0);
+            if (totalIncome < cumulativeTarget) {
+                return p.number; // This is the period we are currently waiting to collect
+            }
+        }
+        return project.periods[project.periods.length - 1].number;
+    }
+
+    /**
+     * Automatically assigns a period number based on a transaction date
+     * by comparing it with the project's period dates.
+     */
+    function assignPeriodByDate(projectId, dateStr) {
+        if (!dateStr) return 0;
+        const project = getProject(projectId);
+        if (!project || !project.periods || project.periods.length === 0) return 0;
+        
+        const txDate = new Date(dateStr).getTime();
+        if (isNaN(txDate)) return 0;
+
+        // Sort periods by date
+        const validPeriods = project.periods
+            .filter(p => p.date)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        if (validPeriods.length === 0) return 0; // No dated periods to compare with
+
+        for (const p of validPeriods) {
+            const pDate = new Date(p.date).getTime();
+            if (txDate <= pDate) {
+                return p.number;
+            }
+        }
+        
+        // If the date is after all period dates, assign to the last period
+        return validPeriods[validPeriods.length - 1].number;
+    }
+
     /**
      * Resolves the effective due date for a transaction.
      * 1. Uses explicit tx.dueDate if set.
@@ -633,36 +685,33 @@ const App = (() => {
     }
 
     /**
-     * Sum of pending expenses that threaten cash flow for a project.
-     * Includes:
-     *   - Overdue: vadesi geçmiş (dueDate < bugün) ve hala "bekliyor" olan borçlar
-     *   - Upcoming: vadesi önümüzdeki 30 gün içinde olan "bekliyor" borçlar
+     * Calculates the Current Period Risk (Dönemsel Risk)
+     * Risk = (Current Cash Balance) - (Unpaid Expenses of Current and Past Periods)
+     * A negative value indicates a cash deficit before the next hakediş arrives.
      */
-    function getProjectUpcoming30DayExpenses(projectId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const limit = new Date(today);
-        limit.setDate(limit.getDate() + RISK_DAYS);
-
+    function getProjectCurrentPeriodRisk(projectId) {
+        const currentPeriod = getProjectCurrentPeriod(projectId);
         const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit', 'borc-al'];
-        return data.transactions
+        
+        const unpaidExpenses = data.transactions
             .filter(t => {
                 if (t.projectId !== projectId) return false;
                 if (!expenseTypes.includes(t.type)) return false;
                 if (t.paymentStatus === 'odendi') return false;
                 if (getTxRemainingAmount(t) <= 0) return false;
-                const dueDateStr = getTxDueDate(t);
-                if (!dueDateStr) return false;
-                const due = new Date(dueDateStr);
-                due.setHours(0, 0, 0, 0);
-                return due <= limit;
+                
+                const txPeriod = t.period || 0;
+                // Only count expenses assigned to the current or past periods, or unassigned (0)
+                return txPeriod <= currentPeriod;
             })
             .reduce((sum, t) => sum + getTxRemainingAmount(t), 0);
+
+        return getProjectBalance(projectId) - unpaidExpenses;
     }
 
-    /** 30-day upcoming expenses for a project */
+    /** Alias for compatibility with rendering logic */
     function getProject30DayRisk(projectId) {
-        return getProjectUpcoming30DayExpenses(projectId);
+        return getProjectCurrentPeriodRisk(projectId);
     }
 
     // ─────────────────────────────────────
@@ -915,9 +964,9 @@ const App = (() => {
         const riskAmount = document.getElementById('dashboard-risk-total');
         const riskLabel = riskCard ? riskCard.querySelector('.risk-label') : null;
         riskAmount.textContent = formatCurrency(totalRisk);
-        riskCard.className = 'risk-card ' + (totalRisk > 0 ? 'risk-negative pulse-danger' : 'risk-positive');
+        riskCard.className = 'risk-card ' + (totalRisk >= 0 ? 'risk-positive' : 'risk-negative pulse-danger');
         if (riskLabel) {
-            riskLabel.textContent = '30 Günlük Yaklaşan Ödemelerim — Tüm Projeler';
+            riskLabel.textContent = totalRisk >= 0 ? 'Dönemsel Nakit Durumu (Sıradaki Hakedişe Kadar)' : 'Dönemsel Nakit Açığı — Darboğaz Riski';
         }
 
         // Stats
@@ -980,14 +1029,14 @@ const App = (() => {
                             <span class="project-card-stat-value ${balance >= 0 ? 'amount-positive' : 'amount-negative'}">${formatCurrency(balance)}</span>
                         </div>
                         <div class="project-card-stat">
-                            <span class="project-card-stat-label">30G Ödemeler</span>
-                            <span class="project-card-stat-value ${risk > 0 ? 'amount-negative' : 'amount-positive'}">${formatCurrency(risk)}</span>
+                            <span class="project-card-stat-label">Dönemsel Risk</span>
+                            <span class="project-card-stat-value ${risk >= 0 ? 'amount-positive' : 'amount-negative'}">${formatCurrency(risk)}</span>
                         </div>
                     </div>
                     <div class="project-card-footer">
                         <span class="project-card-risk">
-                            <span class="dot ${risk > 0 ? 'danger' : 'safe'}"></span>
-                            ${risk > 0 ? 'Yaklaşan ödeme var' : '30 gün içinde ödeme yok'}
+                            <span class="dot ${risk >= 0 ? 'safe' : 'danger'}"></span>
+                            ${risk >= 0 ? 'Güvende' : 'Nakit Açığı Riski'}
                         </span>
                         <span class="project-card-arrow">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
@@ -1113,9 +1162,9 @@ const App = (() => {
         const riskAmount = document.getElementById('detail-risk');
         const riskLabel = riskCard ? riskCard.querySelector('.risk-label') : null;
         riskAmount.textContent = formatCurrency(risk);
-        riskCard.className = 'risk-card compact ' + (risk > 0 ? 'risk-negative pulse-danger' : 'risk-positive');
+        riskCard.className = 'risk-card compact ' + (risk >= 0 ? 'risk-positive' : 'risk-negative pulse-danger');
         if (riskLabel) {
-            riskLabel.textContent = '30 Günlük Yaklaşan Ödemelerim';
+            riskLabel.textContent = risk >= 0 ? 'Dönemsel Nakit Durumu' : 'Dönemsel Nakit Açığı';
         }
 
         // Müşteri Cari Mutabakat Ekstresi & Kârlılık Analizi
@@ -4407,6 +4456,10 @@ const App = (() => {
             tx.period = (typeof pVal === 'string' && pVal.startsWith('ilave-')) ? pVal : (parseInt(pVal, 10) || 0);
         } else {
             tx.period = 0;
+        }
+
+        if (tx.period === 0 && tx.dueDate) {
+            tx.period = assignPeriodByDate(tx.projectId, tx.dueDate);
         }
 
         if (estimatedEl) {
