@@ -938,6 +938,7 @@ const App = (() => {
 
     function renderProjectsGrid() {
         const grid = document.getElementById('projects-grid');
+        if (!grid) return;
 
         if (data.projects.length === 0) {
             grid.innerHTML = `
@@ -960,7 +961,7 @@ const App = (() => {
                     <div class="project-card-header">
                         <div>
                             <div class="project-card-name">${escapeHtml(p.name)}</div>
-                            <div class="project-card-contract">Sözleşme: ${formatCurrency(p.contractAmount)}</div>
+                            <div class="project-card-contract">Sözleşme: ${formatCurrency(getProjectContractAmount(p.id))}</div>
                         </div>
                         <span class="badge ${p.status === 'tamamlandi' ? 'badge-muted' : 'badge-success'}">
                             ${PROJECT_STATUS[p.status] || p.status}
