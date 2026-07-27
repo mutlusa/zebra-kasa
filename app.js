@@ -2075,52 +2075,40 @@ const App = (() => {
         saveProjectDraft();
     }
 
+    function autoCalculateCompletionAmount() {
+        const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
+        const downAmt = parseAmountInput(document.getElementById('input-downpayment-amount'));
+        
+        let sum = downAmt;
+        const amtInputs = document.querySelectorAll('.input-period-amount');
+        amtInputs.forEach(input => {
+            sum += parseAmountInput(input);
+        });
+
+        const compInput = document.getElementById('input-completion-amount');
+        if (compInput) {
+            const remaining = Math.max(0, contractAmt - sum);
+            compInput.value = remaining > 0 ? remaining.toLocaleString('tr-TR') : '0';
+        }
+    }
+
     function onContractAmountInput(el) {
         formatAmountInput(el);
-        const contractAmt = parseAmountInput(el);
-        const count = parseInt(document.getElementById('input-period-count')?.value, 10) || 0;
-        if (count === 0) {
-            const downInput = document.getElementById('input-downpayment-amount');
-            const compInput = document.getElementById('input-completion-amount');
-            if (downInput && compInput) {
-                const downVal = parseAmountInput(downInput);
-                if (downVal === 0) {
-                    compInput.value = contractAmt > 0 ? contractAmt.toLocaleString('tr-TR') : '0';
-                } else {
-                    compInput.value = Math.max(0, contractAmt - downVal).toLocaleString('tr-TR');
-                }
-            }
-        }
+        autoCalculateCompletionAmount();
         generatePeriodFields();
+        validatePeriodSum();
         saveProjectDraft();
     }
 
     function onDownpaymentAmountInput(el) {
         formatAmountInput(el);
-        const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
-        const downAmt = parseAmountInput(el);
-        const count = parseInt(document.getElementById('input-period-count')?.value, 10) || 0;
-        if (count === 0) {
-            const compInput = document.getElementById('input-completion-amount');
-            if (compInput) {
-                compInput.value = Math.max(0, contractAmt - downAmt).toLocaleString('tr-TR');
-            }
-        }
+        autoCalculateCompletionAmount();
         validatePeriodSum();
         saveProjectDraft();
     }
 
     function onCompletionAmountInput(el) {
         formatAmountInput(el);
-        const contractAmt = parseAmountInput(document.getElementById('input-contract-amount'));
-        const compAmt = parseAmountInput(el);
-        const count = parseInt(document.getElementById('input-period-count')?.value, 10) || 0;
-        if (count === 0) {
-            const downInput = document.getElementById('input-downpayment-amount');
-            if (downInput) {
-                downInput.value = Math.max(0, contractAmt - compAmt).toLocaleString('tr-TR');
-            }
-        }
         validatePeriodSum();
         saveProjectDraft();
     }
@@ -2132,6 +2120,7 @@ const App = (() => {
 
     function onPeriodAmountInput(el) {
         formatAmountInput(el);
+        autoCalculateCompletionAmount();
         validatePeriodSum();
         saveProjectDraft();
     }
@@ -2360,8 +2349,9 @@ const App = (() => {
             updateProject(editId, name, contractAmount, status, periodCount, completionAmount, periods);
             showToast('Proje güncellendi.', 'success');
         } else {
-            addProject(name, contractAmount, status, periodCount, completionAmount, periods);
+            const newProj = addProject(name, contractAmount, status, periodCount, completionAmount, periods);
             projectDraft = null; // Clear draft on successful creation
+            currentProjectId = newProj.id;
             showToast('Yeni proje oluşturuldu!', 'success');
         }
 
