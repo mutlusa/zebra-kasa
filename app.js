@@ -19,8 +19,10 @@ const App = (() => {
         'iscilik-malzeme':  { label: 'İşçilik + Malzeme (Taşeron)', icon: '🛠️', direction: 'expense', cssClass: 'expense' },
         'ilave-is':         { label: 'Müşteri İlave İşi (Ek Sözleşme)', icon: '✨', direction: 'expense', cssClass: 'expense' },
         'ofis-sabit':       { label: 'Ofis Sabit Gideri',         icon: '🏢', direction: 'expense', cssClass: 'ofis' },
-        'borc-ver':         { label: 'Proje Borç Verme',           icon: '↗️', direction: 'expense', cssClass: 'loan-out' },
-        'borc-al':          { label: 'Proje Borç Alma',            icon: '↙️', direction: 'income',  cssClass: 'loan-in' }
+        'borc-ver':         { label: 'Verilen Borç Çıkışı (Nakit)', icon: '↗️', direction: 'expense', cssClass: 'loan-out' },
+        'borc-al':          { label: 'Gelen Borç Girişi (Nakit)',   icon: '↙️', direction: 'income',  cssClass: 'loan-in' },
+        'borc-geri-al':     { label: 'Borç Alacağı (Bekleyen)',     icon: '⏳', direction: 'income',  cssClass: 'loan-in' },
+        'borc-geri-ode':    { label: 'Borç Geri Ödemesi (Bekleyen)',icon: '💳', direction: 'expense', cssClass: 'loan-out' }
     };
 
     const STATUS_LABELS = {
@@ -572,32 +574,24 @@ const App = (() => {
     // COMPUTED FIELDS (Formulas)
     // ─────────────────────────────────────
 
-    /** Sum of realized income for a project.
-     *  - hakedis: actual paid amounts (partial payments included)
-     *  - borc-al: ALWAYS (money was received immediately, bekliyor = not yet repaid)
-     */
+    /** Sum of realized income for a project. */
     function getProjectIncome(projectId) {
+        const incomeTypes = ['hakedis', 'borc-al', 'borc-geri-al'];
         return data.transactions
             .filter(t => t.projectId === projectId)
             .reduce((sum, t) => {
-                if (t.type === 'hakedis') return sum + getTxPaidAmount(t);
-                if (t.type === 'borc-al') return sum + getTxPaidAmount(t); // Loan received = immediate income
+                if (incomeTypes.includes(t.type)) return sum + getTxPaidAmount(t);
                 return sum;
             }, 0);
     }
 
-    /** Sum of realized expenses for a project.
-     *  - malzeme/iscilik/ofis-sabit: actual paid amounts (partial payments supported)
-     *  - borc-ver: actual paid amounts
-     *  - borc-al repayments: payments[] on borc-al count as expenses (money leaving)
-     */
+    /** Sum of realized expenses for a project. */
     function getProjectExpense(projectId) {
-        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ofis-sabit', 'borc-ver'];
+        const expenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ilave-is', 'ofis-sabit', 'borc-ver', 'borc-geri-ode'];
         return data.transactions
             .filter(t => t.projectId === projectId)
             .reduce((sum, t) => {
                 if (expenseTypes.includes(t.type)) return sum + getTxPaidAmount(t);
-                if (t.type === 'borc-al') return sum + getTxPaidAmount(t); // Repayments = expense
                 return sum;
             }, 0);
     }
@@ -2682,8 +2676,8 @@ const App = (() => {
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="input-borc-due-date">Geri Ödeme Tarihi <span style="font-weight:400; color:var(--text-muted);">— opsiyonel</span></label>
-                    <input class="form-input" type="date" id="input-borc-due-date" value="">
+                    <label class="form-label" for="input-borc-due-date">Geri Ödeme Tarihi (Vade) <span style="font-weight:400; color:var(--danger);">* Zorunlu</span></label>
+                    <input class="form-input" type="date" id="input-borc-due-date" required>
                 </div>
 
                 <div class="form-group">
@@ -2715,6 +2709,11 @@ const App = (() => {
             return;
         }
 
+        if (!dueDate) {
+            showToast('Lütfen vade (geri ödeme) tarihi giriniz.', 'error');
+            return;
+        }
+
         const currentProject = getProject(currentProjectId);
         const targetProject = getProject(targetProjectId);
         if (!currentProject || !targetProject) {
@@ -2739,47 +2738,88 @@ const App = (() => {
         }
 
         const descText = description || 'Projeler arası borç transferi';
+        const now = new Date().toISOString();
 
-        // Create LENDER transaction (borc-ver → expense, immediately paid)
-        const lenderTx = {
+        // 1. LENDER CASH OUT (Nakit Çıkışı)
+        const lenderTx1 = {
             id: generateId(),
             type: 'borc-ver',
             projectId: lenderProjectId,
             amount: amount,
             paidAmount: amount,
             paymentStatus: 'odendi',
-            dueDate: dueDate || '',
-            description: `${descText} → ${borrowerName}`,
+            dueDate: todayStr(),
+            description: `${descText} → ${borrowerName} (Nakit Çıkışı)`,
             period: 0,
             createdBy: currentUser,
-            createdAt: new Date().toISOString(),
+            createdAt: now,
             linkedProjectId: borrowerProjectId,
             payments: [{ id: generateId(), amount: amount, date: todayStr(), createdBy: currentUser }]
         };
 
-        // Create BORROWER transaction (borc-al → income, pending repayment)
-        const borrowerTx = {
+        // 2. BORROWER CASH IN (Nakit Girişi)
+        const borrowerTx1 = {
             id: generateId(),
             type: 'borc-al',
             projectId: borrowerProjectId,
             amount: amount,
-            paidAmount: 0,
-            paymentStatus: 'bekliyor',
-            dueDate: dueDate || '',
-            description: `${descText} ← ${lenderName}`,
+            paidAmount: amount,
+            paymentStatus: 'odendi',
+            dueDate: todayStr(),
+            description: `${descText} ← ${lenderName} (Nakit Girişi)`,
             period: 0,
             createdBy: currentUser,
-            createdAt: new Date().toISOString(),
+            createdAt: now,
             linkedProjectId: lenderProjectId,
-            linkedTxId: lenderTx.id,
+            payments: [{ id: generateId(), amount: amount, date: todayStr(), createdBy: currentUser }]
+        };
+
+        // 3. LENDER RECEIVABLE (Bekleyen Alacak)
+        const lenderTx2 = {
+            id: generateId(),
+            type: 'borc-geri-al',
+            projectId: lenderProjectId,
+            amount: amount,
+            paidAmount: 0,
+            paymentStatus: 'bekliyor',
+            dueDate: dueDate,
+            description: `${descText} → ${borrowerName} (Gelecek Alacak)`,
+            period: assignPeriodByDate(lenderProjectId, dueDate),
+            createdBy: currentUser,
+            createdAt: now,
+            linkedProjectId: borrowerProjectId,
             payments: []
         };
 
-        // Cross-link
-        lenderTx.linkedTxId = borrowerTx.id;
+        // 4. BORROWER PAYABLE (Bekleyen Borç)
+        const borrowerTx2 = {
+            id: generateId(),
+            type: 'borc-geri-ode',
+            projectId: borrowerProjectId,
+            amount: amount,
+            paidAmount: 0,
+            paymentStatus: 'bekliyor',
+            dueDate: dueDate,
+            description: `${descText} ← ${lenderName} (Gelecek Borç)`,
+            period: assignPeriodByDate(borrowerProjectId, dueDate),
+            createdBy: currentUser,
+            createdAt: now,
+            linkedProjectId: lenderProjectId,
+            payments: []
+        };
 
-        data.transactions.push(lenderTx);
-        data.transactions.push(borrowerTx);
+        // Cross-link the pending transactions so paying the debt pays the receivable
+        lenderTx2.linkedTxId = borrowerTx2.id;
+        borrowerTx2.linkedTxId = lenderTx2.id;
+        
+        // Link cash transactions for traceability
+        lenderTx1.linkedTxId = borrowerTx1.id;
+        borrowerTx1.linkedTxId = lenderTx1.id;
+
+        data.transactions.push(lenderTx1);
+        data.transactions.push(borrowerTx1);
+        data.transactions.push(lenderTx2);
+        data.transactions.push(borrowerTx2);
         saveData();
 
         closeModal();
@@ -3389,25 +3429,29 @@ const App = (() => {
         }
 
         // ── LINKED LOAN REPAYMENT: Update the linked transaction ──
-        if (tx.linkedTxId && (tx.type === 'borc-al' || tx.type === 'borc-ver')) {
+        if (tx.linkedTxId && (tx.type === 'borc-geri-ode' || tx.type === 'borc-geri-al')) {
             const linkedTx = data.transactions.find(t => t.id === tx.linkedTxId);
             if (linkedTx) {
-                // When borc-al is repaid, the lender (borc-ver) should see their money coming back
-                // We add a payment record to the linked tx to track the repayment
+                // When borrower repays (borc-geri-ode) or lender collects (borc-geri-al), sync it.
                 if (!Array.isArray(linkedTx.payments)) linkedTx.payments = [];
                 linkedTx.payments.push({
                     id: generateId(),
                     amount: payAmount,
                     date: todayStr(),
                     createdBy: currentUser,
-                    note: `Geri ödeme (${getProject(tx.projectId)?.name || ''})`
+                    note: `Geri ödeme / Tahsilat (${getProject(tx.projectId)?.name || ''})`
                 });
+                
                 // Sync paidAmount and status
-                linkedTx.paidAmount = (parseFloat(linkedTx.paidAmount) || 0);
+                linkedTx.paidAmount = (parseFloat(linkedTx.paidAmount) || 0) + payAmount;
+                
                 if (tx.paymentStatus === 'odendi') {
-                    // Fully repaid — both sides should show completion
-                    linkedTx.description = linkedTx.description.replace(/\s*\(Geri Ödenmedi\)/g, '');
+                    linkedTx.paymentStatus = 'odendi';
+                } else {
+                    linkedTx.paymentStatus = 'bekliyor';
+                    linkedTx.dueDate = tx.dueDate; // Sync partial payment extension if any
                 }
+                
                 saveData();
             }
         }
