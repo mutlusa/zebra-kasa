@@ -596,6 +596,18 @@ const App = (() => {
             }, 0);
     }
 
+    /** Final projected profit assuming all agreed income is collected and agreed expenses paid. */
+    function getProjectFinalProjectedProfit(projectId) {
+        const totalContract = getProjectContractAmount(projectId);
+        const actualExpenseTypes = ['malzeme', 'iscilik', 'iscilik-malzeme', 'ilave-is', 'ofis-sabit'];
+        
+        const totalAgreedExpense = data.transactions
+            .filter(t => t.projectId === projectId && actualExpenseTypes.includes(t.type))
+            .reduce((sum, t) => sum + t.amount, 0);
+            
+        return totalContract - totalAgreedExpense;
+    }
+
     /** Current cash balance for a project */
     function getProjectBalance(projectId) {
         return getProjectIncome(projectId) - getProjectExpense(projectId);
@@ -1159,6 +1171,14 @@ const App = (() => {
         riskCard.className = 'risk-card compact ' + (risk >= 0 ? 'risk-positive' : 'risk-negative pulse-danger');
         if (riskLabel) {
             riskLabel.textContent = risk >= 0 ? 'Dönemsel Nakit Durumu' : 'Dönemsel Nakit Açığı';
+        }
+        
+        // Projected Final Profit card
+        const projectedProfitEl = document.getElementById('detail-projected-profit');
+        if (projectedProfitEl) {
+            const projectedProfit = getProjectFinalProjectedProfit(projectId);
+            projectedProfitEl.textContent = formatCurrency(projectedProfit);
+            projectedProfitEl.style.color = projectedProfit >= 0 ? 'var(--success)' : 'var(--danger)';
         }
 
         // Müşteri Cari Mutabakat Ekstresi & Kârlılık Analizi
